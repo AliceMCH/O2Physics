@@ -21,6 +21,7 @@
 #include "Common/DataModel/EventSelection.h"
 #include "Common/DataModel/Multiplicity.h"
 #include "Common/DataModel/TrackSelectionTables.h"
+#include "Common/DataModel/FwdTrackReAlignTables.h"
 #include "Tools/ML/MlResponse.h"
 
 #include <CCDB/BasicCCDBManager.h>
@@ -99,49 +100,6 @@ DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, matchCandidate); //! Ar
 
 DECLARE_SOA_TABLE(FwdTrkMatchCands, "AOD", "FWDTRKMATCHCAND", //! Vectors of match-candidate indices stored per fwdtrack
                   globalmuonmatching::GlobalMuonMatchCandidateIds, o2::soa::Marker<3>);
-
-// FwdTracks-like tables for refitted global-muon match candidates (one row per GMCAND entry)
-DECLARE_SOA_TABLE(GMCandidateFwdTracks, "AOD", "GMMCANDTRK",
-                  o2::soa::Index<>,
-                  fwdtrack::CollisionId, fwdtrack::TrackType,
-                  fwdtrack::X, fwdtrack::Y, fwdtrack::Z, fwdtrack::Phi, fwdtrack::Tgl,
-                  fwdtrack::Signed1Pt, fwdtrack::NClusters, fwdtrack::PDca, fwdtrack::RAtAbsorberEnd,
-                  fwdtrack::Px<fwdtrack::Pt, fwdtrack::Phi>,
-                  fwdtrack::Py<fwdtrack::Pt, fwdtrack::Phi>,
-                  fwdtrack::Pz<fwdtrack::Pt, fwdtrack::Tgl>,
-                  fwdtrack::Sign<fwdtrack::Signed1Pt>,
-                  fwdtrack::Chi2, fwdtrack::Chi2MatchMCHMID, fwdtrack::Chi2MatchMCHMFT,
-                  fwdtrack::MatchScoreMCHMFT, globalmuonmatching::MatchRanking, globalmuonmatching::IsTagged,
-                  fwdtrack::MFTTrackId, fwdtrack::MCHTrackId,
-                  fwdtrack::MCHBitMap, fwdtrack::MIDBitMap, fwdtrack::MIDBoards,
-                  fwdtrack::TrackTime, fwdtrack::TrackTimeRes);
-
-DECLARE_SOA_EXTENDED_TABLE(GMCandidateFwdTracksExt, GMCandidateFwdTracks, "GMMCANDTRKEX", 0, //!
-                           aod::fwdtrack::Pt,
-                           aod::fwdtrack::Eta,
-                           aod::fwdtrack::P);
-
-DECLARE_SOA_TABLE(GMCandidateFwdTracksCov, "AOD", "GMMCANDTRKCOV", //!
-                  fwdtrack::SigmaX, fwdtrack::SigmaY, fwdtrack::SigmaPhi, fwdtrack::SigmaTgl, fwdtrack::Sigma1Pt,
-                  fwdtrack::RhoXY, fwdtrack::RhoPhiY, fwdtrack::RhoPhiX, fwdtrack::RhoTglX, fwdtrack::RhoTglY,
-                  fwdtrack::RhoTglPhi, fwdtrack::Rho1PtX, fwdtrack::Rho1PtY, fwdtrack::Rho1PtPhi, fwdtrack::Rho1PtTgl);
-
-DECLARE_SOA_EXTENDED_TABLE(GMCandidateFwdTracksCovExt, GMCandidateFwdTracksCov, "GMMCANDTRKCOVEX", 0, //!
-                           aod::fwdtrack::CXX,
-                           aod::fwdtrack::CXY,
-                           aod::fwdtrack::CYY,
-                           aod::fwdtrack::CPhiX,
-                           aod::fwdtrack::CPhiY,
-                           aod::fwdtrack::CPhiPhi,
-                           aod::fwdtrack::CTglX,
-                           aod::fwdtrack::CTglY,
-                           aod::fwdtrack::CTglPhi,
-                           aod::fwdtrack::CTglTgl,
-                           aod::fwdtrack::C1PtX,
-                           aod::fwdtrack::C1PtY,
-                           aod::fwdtrack::C1PtPhi,
-                           aod::fwdtrack::C1PtTgl,
-                           aod::fwdtrack::C1Pt21Pt2);
 } // namespace o2::aod
 
 using MyEvents = soa::Join<aod::Collisions, aod::EvSels, aod::FT0Mults, aod::MFTMults, aod::PVMults, aod::CentFT0Ms, aod::CentFT0As, aod::CentFT0Cs>;
@@ -301,8 +259,8 @@ struct GlobalMuonMatching {
 
   Produces<o2::aod::GlobalMuonMatchCandidates> globalMuonMatchCandidates;
   Produces<o2::aod::FwdTrkMatchCands> fwdTrkMatchCands;
-  Produces<o2::aod::GMCandidateFwdTracks> gmCandidateFwdTracks;
-  Produces<o2::aod::GMCandidateFwdTracksCov> gmCandidateFwdTracksCov;
+  Produces<o2::aod::StoredFwdTracksReAlign> gmCandidateFwdTracks;
+  Produces<o2::aod::StoredFwdTrksCovReAlign> gmCandidateFwdTracksCov;
 
   int32_t mMatchCandidateCounter{0};
   std::unordered_map<int64_t, std::vector<int32_t>> mMchTrackToCandidateIndices;
@@ -639,6 +597,8 @@ struct GlobalMuonMatching {
   {
     const int32_t collisionId = track.has_collision() ? track.collisionId() : -1;
 
+    bool isRemovable = false;
+
     gmCandidateFwdTracks(
       collisionId,
       track.trackType(),
@@ -651,12 +611,11 @@ struct GlobalMuonMatching {
       track.nClusters(),
       track.pDca(),
       track.rAtAbsorberEnd(),
+      isRemovable,
       track.chi2(),
       track.chi2MatchMCHMID(),
       chi2MatchMCHMFT,
       matchScoreMCHMFT,
-      matchRanking,
-      isTagged,
       track.matchMFTTrackId(),
       gmmMchTrackId,
       track.mchBitMap(),
@@ -702,6 +661,8 @@ struct GlobalMuonMatching {
     const float chi2 = static_cast<float>(mchTrack.chi2());
     const int32_t collisionId = mchTrack.has_collision() ? mchTrack.collisionId() : -1;
 
+    bool isRemovable = false;
+
     gmCandidateFwdTracks(
       collisionId,
       candidateTrackType,
@@ -714,12 +675,11 @@ struct GlobalMuonMatching {
       nClusters,
       mchTrack.pDca(),
       mchTrack.rAtAbsorberEnd(),
+      isRemovable,
       chi2,
       mchTrack.chi2MatchMCHMID(),
       static_cast<float>(candidate.matchChi2),
       static_cast<float>(candidate.matchScore),
-      static_cast<int32_t>(candidate.matchRanking),
-      isTagged,
       static_cast<int>(mftTrack.globalIndex()),
       gmmMchTrackId,
       mchTrack.mchBitMap(),
@@ -1294,7 +1254,6 @@ struct GlobalMuonMatching {
         fillMatchingCandidatesForCollision(collision, muonTracks, mftTracks, mftCovs, matchingCandidates, taggedMuons);
       }
     }
-
   }
 
   template <class TCOLLISION, class TMUON, class TMFT, class CMFT>
@@ -1474,6 +1433,13 @@ struct GlobalMuonMatching {
   }
 
   PROCESS_SWITCH(GlobalMuonMatching, processData, "processData", true);
+};
+
+// Extends the fwdtracksrealign table with expression columns
+struct GlobalMuonMatchingSpawner {
+  Spawns<aod::FwdTrksCovReAlign> realignFwdTrksCov;
+  Spawns<aod::FwdTracksReAlign> realignFwdTrks;
+  void init(InitContext const&) {}
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
