@@ -190,6 +190,7 @@ struct GlobalMuonMatching {
   Configurable<bool> cfgProduceCandidateFwdTracks{"cfgProduceCandidateFwdTracks", false, "Produce GMMCANDTRK/GMMCANDTRKCOV tables (all FwdTracks + match candidates)"};
   Configurable<bool> cfgIncludeGlobalMuonsInFwdTracks{"cfgIncludeGlobalMuonsInFwdTracks", false, "Include MFT-MCH-MID global muons in GMMCANDTRK table"};
   Configurable<int> cfgMaxCandidatesPerMchTrack{"cfgMaxCandidatesPerMchTrack", -1, "Maximum number of match candidates stored per MCH track (-1: no limit)"};
+  Configurable<bool> cfgMatchAllTracks{"cfgMatchAllTracks", false, "If true the matching is performed considering all the MFT tracks for which the covariances are available; if false the matching is performed considering only the global forward tracks stored at production"};
 
   double mBzAtMftCenter{0};
 
@@ -1073,20 +1074,47 @@ struct GlobalMuonMatching {
         }
       }
 
-      // build matching candidates from all time-compatible MFT-MCH pairs
-      for (int64_t mchTrackIndex : collisionInfo.mchTracks) {
-        const auto& mchTrack = muonTracks.rawIteratorAt(mchTrackIndex);
-        for (const auto& mftTrack : mftTracks) {
-          if (!isMftMchTimeCompatible(collisions, bcs, mchTrack, mftTrack)) {
+      if(!cfgMatchAllTracks.value) {
+        // collect global MFT-MCH or MFT-MCH-MID tracks and associate them to the corresponding MCH(-MID) track
+        for (const auto& muonTrack : muonTracks) {
+          if (!muonTrack.has_collision()) {
             continue;
           }
-          if (mftTrackCovs.count(mftTrack.globalIndex()) < 1) {
+          if (collisionIndex != muonTrack.collisionId()) {
+            continue;
+          }
+          // skip MCH or MCH-MID tracks
+          if (static_cast<int>(muonTrack.trackType()) > GlobalTrackTypeMax) {
             continue;
           }
 
-          collisionInfo.matchingCandidates[mchTrackIndex].emplace_back(MatchingCandidate{
-            mftTrack.globalIndex()});
+          auto const& mchTrack = muonTrack.template matchMCHTrack_as<TMUON>();
+          int64_t mchTrackIndex = mchTrack.globalIndex();
+          auto const& mftTrack = muonTrack.template matchMFTTrack_as<TMFT>();
+          int64_t mftTrackIndex = mftTrack.globalIndex();
+
+          if (mftTrackCovs.count(mftTrackIndex) < 1) {
+            continue;
+          }
+
+          collisionInfo.matchingCandidates[mchTrackIndex].emplace_back(MatchingCandidate{mftTrackIndex});
         }
+      } else {
+        // build matching candidates from all time-compatible MFT-MCH pairs
+        for (int64_t mchTrackIndex : collisionInfo.mchTracks) {
+          const auto& mchTrack = muonTracks.rawIteratorAt(mchTrackIndex);
+          for (const auto& mftTrack : mftTracks) {
+            if (!isMftMchTimeCompatible(collisions, bcs, mchTrack, mftTrack)) {
+              continue;
+            }
+            if (mftTrackCovs.count(mftTrack.globalIndex()) < 1) {
+              continue;
+            }
+
+            collisionInfo.matchingCandidates[mchTrackIndex].emplace_back(MatchingCandidate{
+              mftTrack.globalIndex()});
+          }
+         }
       }
     }
   }
