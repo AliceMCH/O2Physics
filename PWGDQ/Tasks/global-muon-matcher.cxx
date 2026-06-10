@@ -1298,9 +1298,6 @@ struct GlobalMuonMatching {
       }
 
       const auto& mchTrack = muonTracks.rawIteratorAt(mchIndex);
-      if (!isGoodGlobalMuon(mchTrack, collision)) {
-        continue;
-      }
 
       bool isTagged = std::find(taggedMuons.begin(), taggedMuons.end(), mchIndex) != taggedMuons.end();
 
