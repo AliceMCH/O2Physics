@@ -43,7 +43,6 @@
 #include <GlobalTracking/MatchGlobalFwd.h>
 #include <MCHTracking/TrackExtrap.h>
 #include <MFTTracking/Constants.h>
-#include <ReconstructionDataFormats/GlobalFwdTrack.h>
 #include <ReconstructionDataFormats/TrackFwd.h>
 
 #include <Math/MatrixFunctions.h>
@@ -194,9 +193,7 @@ struct GlobalMuonMatching {
 
   double mBzAtMftCenter{0};
 
-  o2::globaltracking::MatchGlobalFwd mExtrap;
-
-  using MatchingFunc = std::function<std::tuple<double, int>(const o2::dataformats::GlobalFwdTrack& mchtrack, const o2::track::TrackParCovFwd& mfttrack)>;
+  using MatchingFunc = std::function<std::tuple<double, int>(const o2::track::TrackParCovFwd& mchtrack, const o2::track::TrackParCovFwd& mfttrack)>;
   std::map<std::string, MatchingFunc> mMatchingFunctionMap; ///< MFT-MCH Matching function
 
   // Chi2 matching interface (single configurable method)
@@ -269,7 +266,157 @@ struct GlobalMuonMatching {
   std::unordered_map<int64_t, bool> mMchTrackIsTagged;
   std::unordered_map<int64_t, int32_t> mFwdTrackToGmmCandTrkIndex;
 
-  CollisionInfos fCollisionInfos;
+  template <class T>
+  o2::mch::TrackParam FwdtoMCH(const T& fwdtrack)
+  {
+    using SMatrix55Std = ROOT::Math::SMatrix<double, 5>;
+    using SMatrix55Sym = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
+
+    // Convert Forward Track parameters and covariances matrix to the
+    // MCH track format.
+
+    // Parameter conversion
+    double alpha1, alpha3, alpha4, x2, x3, x4;
+
+    x2 = fwdtrack.getPhi();
+    x3 = fwdtrack.getTanl();
+    x4 = fwdtrack.getInvQPt();
+
+    auto sinx2 = TMath::Sin(x2);
+    auto cosx2 = TMath::Cos(x2);
+
+    alpha1 = cosx2 / x3;
+    alpha3 = sinx2 / x3;
+    alpha4 = x4 / TMath::Sqrt(x3 * x3 + sinx2 * sinx2);
+
+    auto K = TMath::Sqrt(x3 * x3 + sinx2 * sinx2);
+    auto K3 = K * K * K;
+
+    // Covariances matrix conversion
+    SMatrix55Std jacobian;
+    SMatrix55Sym covariances;
+
+    covariances(0, 0) = fwdtrack.getCovariances()(0, 0);
+    covariances(0, 1) = fwdtrack.getCovariances()(0, 1);
+    covariances(0, 2) = fwdtrack.getCovariances()(0, 2);
+    covariances(0, 3) = fwdtrack.getCovariances()(0, 3);
+    covariances(0, 4) = fwdtrack.getCovariances()(0, 4);
+
+    covariances(1, 1) = fwdtrack.getCovariances()(1, 1);
+    covariances(1, 2) = fwdtrack.getCovariances()(1, 2);
+    covariances(1, 3) = fwdtrack.getCovariances()(1, 3);
+    covariances(1, 4) = fwdtrack.getCovariances()(1, 4);
+
+    covariances(2, 2) = fwdtrack.getCovariances()(2, 2);
+    covariances(2, 3) = fwdtrack.getCovariances()(2, 3);
+    covariances(2, 4) = fwdtrack.getCovariances()(2, 4);
+
+    covariances(3, 3) = fwdtrack.getCovariances()(3, 3);
+    covariances(3, 4) = fwdtrack.getCovariances()(3, 4);
+
+    covariances(4, 4) = fwdtrack.getCovariances()(4, 4);
+
+    jacobian(0, 0) = 1;
+
+    jacobian(1, 2) = -sinx2 / x3;
+    jacobian(1, 3) = -cosx2 / (x3 * x3);
+
+    jacobian(2, 1) = 1;
+
+    jacobian(3, 2) = cosx2 / x3;
+    jacobian(3, 3) = -sinx2 / (x3 * x3);
+
+    jacobian(4, 2) = -x4 * sinx2 * cosx2 / K3;
+    jacobian(4, 3) = -x3 * x4 / K3;
+    jacobian(4, 4) = 1 / K;
+    // jacobian*covariances*jacobian^T
+    covariances = ROOT::Math::Similarity(jacobian, covariances);
+
+    double cov[] = {covariances(0, 0), covariances(1, 0), covariances(1, 1), covariances(2, 0), covariances(2, 1), covariances(2, 2), covariances(3, 0), covariances(3, 1), covariances(3, 2), covariances(3, 3), covariances(4, 0), covariances(4, 1), covariances(4, 2), covariances(4, 3), covariances(4, 4)};
+    double param[] = {fwdtrack.getX(), alpha1, fwdtrack.getY(), alpha3, alpha4};
+
+    o2::mch::TrackParam convertedTrack(fwdtrack.getZ(), param, cov);
+    return o2::mch::TrackParam(convertedTrack);
+  }
+
+  o2::track::TrackParCovFwd MCHtoFwd(const o2::mch::TrackParam& mchParam)
+  {
+    using SMatrix55Std = ROOT::Math::SMatrix<double, 5>;
+    using SMatrix55Sym = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
+
+    // Convert a MCH Track parameters and covariances matrix to the
+    // Forward track format. Must be called after propagation though the absorber
+
+    o2::track::TrackParCovFwd convertedTrack;
+
+    // Parameter conversion
+    double alpha1, alpha3, alpha4, x2, x3, x4;
+
+    alpha1 = mchParam.getNonBendingSlope();
+    alpha3 = mchParam.getBendingSlope();
+    alpha4 = mchParam.getInverseBendingMomentum();
+
+    x2 = TMath::ATan2(-alpha3, -alpha1);
+    x3 = -1. / TMath::Sqrt(alpha3 * alpha3 + alpha1 * alpha1);
+    x4 = alpha4 * -x3 * TMath::Sqrt(1 + alpha3 * alpha3);
+
+    auto K = alpha1 * alpha1 + alpha3 * alpha3;
+    auto K32 = K * TMath::Sqrt(K);
+    auto L = TMath::Sqrt(alpha3 * alpha3 + 1);
+
+    // Covariances matrix conversion
+    SMatrix55Std jacobian;
+    SMatrix55Sym covariances;
+
+    covariances(0, 0) = mchParam.getCovariances()(0, 0);
+    covariances(0, 1) = mchParam.getCovariances()(0, 1);
+    covariances(0, 2) = mchParam.getCovariances()(0, 2);
+    covariances(0, 3) = mchParam.getCovariances()(0, 3);
+    covariances(0, 4) = mchParam.getCovariances()(0, 4);
+
+    covariances(1, 1) = mchParam.getCovariances()(1, 1);
+    covariances(1, 2) = mchParam.getCovariances()(1, 2);
+    covariances(1, 3) = mchParam.getCovariances()(1, 3);
+    covariances(1, 4) = mchParam.getCovariances()(1, 4);
+
+    covariances(2, 2) = mchParam.getCovariances()(2, 2);
+    covariances(2, 3) = mchParam.getCovariances()(2, 3);
+    covariances(2, 4) = mchParam.getCovariances()(2, 4);
+
+    covariances(3, 3) = mchParam.getCovariances()(3, 3);
+    covariances(3, 4) = mchParam.getCovariances()(3, 4);
+
+    covariances(4, 4) = mchParam.getCovariances()(4, 4);
+
+    jacobian(0, 0) = 1;
+
+    jacobian(1, 2) = 1;
+
+    jacobian(2, 1) = -alpha3 / K;
+    jacobian(2, 3) = alpha1 / K;
+
+    jacobian(3, 1) = alpha1 / K32;
+    jacobian(3, 3) = alpha3 / K32;
+
+    jacobian(4, 1) = -alpha1 * alpha4 * L / K32;
+    jacobian(4, 3) = alpha3 * alpha4 * (1 / (TMath::Sqrt(K) * L) - L / K32);
+    jacobian(4, 4) = L / TMath::Sqrt(K);
+
+    // jacobian*covariances*jacobian^T
+    covariances = ROOT::Math::Similarity(jacobian, covariances);
+
+    // Set output
+    convertedTrack.setX(mchParam.getNonBendingCoor());
+    convertedTrack.setY(mchParam.getBendingCoor());
+    convertedTrack.setZ(mchParam.getZ());
+    convertedTrack.setPhi(x2);
+    convertedTrack.setTanl(x3);
+    convertedTrack.setInvQPt(x4);
+    convertedTrack.setCharge(mchParam.getCharge());
+    convertedTrack.setCovariances(covariances);
+
+    return convertedTrack;
+  }
 
   template <typename BC>
   void initCcdb(BC const& bc)
@@ -313,7 +460,7 @@ struct GlobalMuonMatching {
 
     // Define built-in matching functions
     //________________________________________________________________________________
-    mMatchingFunctionMap["matchALL"] = [](const o2::dataformats::GlobalFwdTrack& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
+    mMatchingFunctionMap["matchALL"] = [](const o2::track::TrackParCovFwd& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
       // Match two tracks evaluating all parameters: X,Y, phi, tanl & q/pt
 
       SMatrix55Sym hK, vK;
@@ -347,7 +494,7 @@ struct GlobalMuonMatching {
     };
 
     //________________________________________________________________________________
-    mMatchingFunctionMap["matchXYPhiTanl"] = [](const o2::dataformats::GlobalFwdTrack& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
+    mMatchingFunctionMap["matchXYPhiTanl"] = [](const o2::track::TrackParCovFwd& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
       // Match two tracks evaluating positions & angles
 
       SMatrix45 hK;
@@ -380,7 +527,7 @@ struct GlobalMuonMatching {
     };
 
     //________________________________________________________________________________
-    mMatchingFunctionMap["matchXY"] = [](const o2::dataformats::GlobalFwdTrack& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
+    mMatchingFunctionMap["matchXY"] = [](const o2::track::TrackParCovFwd& mchTrack, const o2::track::TrackParCovFwd& mftTrack) -> std::tuple<double, int> {
       // Calculate Matching Chi2 - X and Y positions
 
       SMatrix25 hK;
@@ -692,43 +839,9 @@ struct GlobalMuonMatching {
     storeFwdTrackCovariance(globalMuonRefit.getCovariances());
   }
 
-  template <typename T>
-  o2::dataformats::GlobalFwdTrack fwdToTrackPar(const T& track)
+  o2::track::TrackParCovFwd propagateToZMchPar(const o2::track::TrackParCovFwd& muon, const double z)
   {
-    double chi2 = track.chi2();
-    SMatrix5 tpars(track.x(), track.y(), track.phi(), track.tgl(), track.signed1Pt());
-    std::vector<double> v1{0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0};
-    SMatrix55 tcovs(v1.begin(), v1.end());
-    o2::track::TrackParCovFwd trackparCov{track.z(), tpars, tcovs, chi2};
-    o2::dataformats::GlobalFwdTrack fwdtrack;
-    fwdtrack.setParameters(trackparCov.getParameters());
-    fwdtrack.setZ(trackparCov.getZ());
-    fwdtrack.setCovariances(trackparCov.getCovariances());
-    return fwdtrack;
-  }
-
-  template <typename T, typename C>
-  o2::dataformats::GlobalFwdTrack fwdToTrackPar(const T& track, const C& cov)
-  {
-    double chi2 = track.chi2();
-    SMatrix5 tpars(track.x(), track.y(), track.phi(), track.tgl(), track.signed1Pt());
-    std::vector<double> v1{cov.cXX(), cov.cXY(), cov.cYY(), cov.cPhiX(), cov.cPhiY(),
-                           cov.cPhiPhi(), cov.cTglX(), cov.cTglY(), cov.cTglPhi(), cov.cTglTgl(),
-                           cov.c1PtX(), cov.c1PtY(), cov.c1PtPhi(), cov.c1PtTgl(), cov.c1Pt21Pt2()};
-    SMatrix55 tcovs(v1.begin(), v1.end());
-    o2::track::TrackParCovFwd trackparCov{track.z(), tpars, tcovs, chi2};
-    o2::dataformats::GlobalFwdTrack fwdtrack;
-    fwdtrack.setParameters(trackparCov.getParameters());
-    fwdtrack.setZ(trackparCov.getZ());
-    fwdtrack.setCovariances(trackparCov.getCovariances());
-    return fwdtrack;
-  }
-
-  o2::dataformats::GlobalFwdTrack propagateToZMch(const o2::dataformats::GlobalFwdTrack& muon, const double z)
-  {
-    auto mchTrack = mExtrap.FwdtoMCH(muon);
+    auto mchTrack = FwdtoMCH(muon);
 
     float absFront = -90.f;
     float absBack = -505.f;
@@ -741,17 +854,11 @@ struct GlobalMuonMatching {
       o2::mch::TrackExtrap::extrapToZCov(mchTrack, z);
     }
 
-    auto proptrack = mExtrap.MCHtoFwd(mchTrack);
-    o2::dataformats::GlobalFwdTrack propmuon;
-    propmuon.setParameters(proptrack.getParameters());
-    propmuon.setZ(proptrack.getZ());
-    propmuon.setCovariances(proptrack.getCovariances());
-
-    return propmuon;
+    return MCHtoFwd(mchTrack);
   }
 
   template <typename T>
-  o2::dataformats::GlobalFwdTrack propagateToZMch(const T& muon, const double z)
+  o2::track::TrackParCovFwd propagateToZMch(const T& muon, const double z)
   {
     double chi2 = muon.chi2();
     SMatrix5 tpars(muon.x(), muon.y(), muon.phi(), muon.tgl(), muon.signed1Pt());
@@ -760,26 +867,22 @@ struct GlobalMuonMatching {
                            muon.c1PtX(), muon.c1PtY(), muon.c1PtPhi(), muon.c1PtTgl(), muon.c1Pt21Pt2()};
     SMatrix55 tcovs(v1.begin(), v1.end());
     o2::track::TrackParCovFwd fwdtrack{muon.z(), tpars, tcovs, chi2};
-    o2::dataformats::GlobalFwdTrack track;
-    track.setParameters(fwdtrack.getParameters());
-    track.setZ(fwdtrack.getZ());
-    track.setCovariances(fwdtrack.getCovariances());
 
-    return propagateToZMch(track, z);
+    return propagateToZMchPar(fwdtrack, z);
   }
 
-  o2::dataformats::GlobalFwdTrack propagateToZMft(const o2::dataformats::GlobalFwdTrack& mftTrack, const double z)
+  o2::track::TrackParCovFwd propagateToZMftPar(const o2::track::TrackParCovFwd& mftTrack, const double z)
   {
-    o2::dataformats::GlobalFwdTrack fwdtrack{mftTrack};
-    fwdtrack.propagateToZ(z, mBzAtMftCenter);
-    return fwdtrack;
+    o2::track::TrackParCovFwd trackExtrap{mftTrack};
+    trackExtrap.propagateToZ(z, mBzAtMftCenter);
+    return trackExtrap;
   }
 
   template <typename TMFT, typename CMFT>
-  o2::dataformats::GlobalFwdTrack propagateToZMft(const TMFT& mftTrack, const CMFT& mftCov, const double z)
+  o2::track::TrackParCovFwd propagateToZMft(const TMFT& mftTrack, const CMFT& mftCov, const double z)
   {
-    o2::dataformats::GlobalFwdTrack fwdtrack = fwdToTrackPar(mftTrack, mftCov);
-    return propagateToZMft(fwdtrack, z);
+    auto fwdtrack = fwdtrackutils::getTrackParCovFwd(mftTrack, mftCov);
+    return propagateToZMftPar(fwdtrack, z);
   }
 
   // method 0: standard extrapolation
@@ -787,7 +890,7 @@ struct GlobalMuonMatching {
   // method 2: MCH track extrapolation constrained to the first MFT track point, MFT extrapolation using MCH momentum
   // method 3: MCH track extrapolation constrained to the collision point, MFT extrapolation using MCH momentum
   template <typename TMCH, typename TMFT, typename CMFT, typename C>
-  o2::dataformats::GlobalFwdTrack propagateToMatchingPlaneMch(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
+  o2::track::TrackParCovFwd propagateToMatchingPlaneMch(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
   {
     if (method == ExtrapolationMethodStandard || method == 1) {
       // simple extrapolation upstream through the absorber
@@ -796,35 +899,37 @@ struct GlobalMuonMatching {
 
     if (method == ExtrapolationMethodMftFirstPoint) {
       // extrapolation to the first MFT point and then back to the matching plane
-      auto mftTrackPar = fwdToTrackPar(mftTrack, mftTrackCov);
+      auto mftTrackPar = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
       // std::cout << std::format("[propagateToMatchingPlaneMch] extrapolating to MFT: x={:0.3f} y={:0.3f} z={:0.3f}", mftTrackPar.getX(), mftTrackPar.getY(), mftTrackPar.getZ()) << std::endl;
-      auto mchTrackAtMFT = propagateToVertexMch(fwdToTrackPar(mchTrack, mchTrack),
+      auto mchTrackAtMFT = propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
                                                 mftTrackPar.getX(), mftTrackPar.getY(), mftTrackPar.getZ(),
                                                 mftTrackPar.getSigma2X(), mftTrackPar.getSigma2Y());
       // std::cout << std::format("[propagateToMatchingPlaneMch] extrapolating to z={:0.3f}", z) << std::endl;
-      return propagateToZMch(mchTrackAtMFT, z);
+      return propagateToZMchPar(mchTrackAtMFT, z);
     }
 
     if (method == ExtrapolationMethodVertex) {
       // extrapolation to the vertex and then back to the matching plane
-      auto mchTrackAtVertex = VarManager::PropagateMuon(mchTrack, collision, VarManager::kToVertex);
-      return propagateToZMch(mchTrackAtVertex, z);
+      auto mchTrackAtVertex =  propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
+                                                    collision.posX(), collision.posY(), collision.posZ(),
+                                                    collision.covXX(), collision.covYY());
+      return propagateToZMchPar(mchTrackAtVertex, z);
     }
 
     if (method == ExtrapolationMethodMftDca) {
       // extrapolation to the MFT DCA and then back to the matching plane
-      auto mftTrackDCA = propagateToZMft(fwdToTrackPar(mftTrack, mftTrackCov), collision.posZ());
-      auto mchTrackAtDCA = propagateToVertexMch(fwdToTrackPar(mchTrack, mchTrack),
+      auto mftTrackDCA = propagateToZMftPar(fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov), collision.posZ());
+      auto mchTrackAtDCA = propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
                                                 mftTrackDCA.getX(), mftTrackDCA.getY(), mftTrackDCA.getZ(),
                                                 mftTrackDCA.getSigma2X(), mftTrackDCA.getSigma2Y());
-      return propagateToZMch(mchTrackAtDCA, z);
+      return propagateToZMchPar(mchTrackAtDCA, z);
     }
 
     return {};
   }
 
   template <typename TMCH, typename TMFT, typename CMFT, typename C>
-  o2::dataformats::GlobalFwdTrack propagateToMatchingPlaneMft(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
+  o2::track::TrackParCovFwd propagateToMatchingPlaneMft(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
   {
     if (method == ExtrapolationMethodStandard) {
       // extrapolation with MFT tools
@@ -840,7 +945,7 @@ struct GlobalMuonMatching {
       double pt = std::hypot(px, py);
       double sign = mchTrack.sign();
 
-      o2::dataformats::GlobalFwdTrack track = fwdToTrackPar(mftTrack, mftTrackCov);
+      auto track = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
 
       // update momentum in track parameters and errors
       auto newCov = track.getCovariances();
@@ -848,43 +953,31 @@ struct GlobalMuonMatching {
       track.setCovariances(newCov);
       track.setInvQPt(sign / pt);
 
-      auto trackExt = mExtrap.FwdtoMCH(track);
+      auto trackExt = FwdtoMCH(track);
       o2::mch::TrackExtrap::extrapToZCov(trackExt, z);
 
-      o2::dataformats::GlobalFwdTrack propmuon;
-      auto proptrack = mExtrap.MCHtoFwd(trackExt);
-      propmuon.setParameters(proptrack.getParameters());
-      propmuon.setZ(proptrack.getZ());
-      propmuon.setCovariances(proptrack.getCovariances());
-
-      return propmuon;
+      return MCHtoFwd(trackExt);
     }
 
     return {};
   }
 
-  o2::dataformats::GlobalFwdTrack propagateToVertexMch(const o2::dataformats::GlobalFwdTrack& muon,
+  o2::track::TrackParCovFwd propagateToVertexMch(const o2::track::TrackParCovFwd& muon,
                                                        const double vx, const double vy, const double vz,
                                                        const double covVx, const double covVy)
   {
-    auto mchTrack = mExtrap.FwdtoMCH(muon);
+    auto mchTrack = FwdtoMCH(muon);
 
     o2::mch::TrackExtrap::extrapToVertex(mchTrack, vx, vy, vz, covVx, covVy);
 
-    auto proptrack = mExtrap.MCHtoFwd(mchTrack);
-    o2::dataformats::GlobalFwdTrack propmuon;
-    propmuon.setParameters(proptrack.getParameters());
-    propmuon.setZ(proptrack.getZ());
-    propmuon.setCovariances(proptrack.getCovariances());
-
-    return propmuon;
+    return MCHtoFwd(mchTrack);
   }
 
   template <class TMCH, class C>
-  o2::dataformats::GlobalFwdTrack propagateToVertexMch(const TMCH& muon,
+  o2::track::TrackParCovFwd propagateToVertexMch(const TMCH& muon,
                                                        const C& collision)
   {
-    return propagateToVertexMch(fwdToTrackPar(muon, muon),
+    return propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(muon, muon),
                                 collision.posX(),
                                 collision.posY(),
                                 collision.posZ(),
@@ -892,32 +985,28 @@ struct GlobalMuonMatching {
                                 collision.covYY());
   }
 
-  o2::dataformats::GlobalFwdTrack propagateToVertexMft(o2::dataformats::GlobalFwdTrack muon,
+  o2::track::TrackParCovFwd propagateToVertexMft(o2::track::TrackParCovFwd muon,
                                                        const float vx, const float vy, const float vz,
                                                        const float covVx, const float covVy)
   {
-    o2::dataformats::GlobalFwdTrack propmuon;
     auto geoMan = o2::base::GeometryManager::meanMaterialBudget(muon.getX(), muon.getY(), muon.getZ(), vx, vy, vz);
     auto x2x0 = static_cast<float>(geoMan.meanX2X0);
     muon.propagateToVtxhelixWithMCS(vz, {vx, vy}, {covVx, covVy}, mBzAtMftCenter, x2x0);
-    propmuon.setParameters(muon.getParameters());
-    propmuon.setZ(muon.getZ());
-    propmuon.setCovariances(muon.getCovariances());
 
-    return propmuon;
+    return muon;
   }
 
 
   template <typename TMCH, typename TMFT, class C>
-  o2::dataformats::GlobalFwdTrack propagateToVertexMft(const TMFT& mftTrack,
+  o2::track::TrackParCovFwd propagateToVertexMft(const TMFT& mftTrack,
                                                        const TMCH& mchTrack,
                                                        const C& collision)
   {
     // extrapolation with MCH tools
-    auto mchTrackAtMFT = mExtrap.FwdtoMCH(fwdToTrackPar(mchTrack));
+    auto mchTrackAtMFT = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(mchTrack));
     o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackAtMFT, mftTrack.z());
 
-    auto mftTrackProp = mExtrap.FwdtoMCH(fwdToTrackPar(mftTrack));
+    auto mftTrackProp = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(mftTrack));
 
     // update global track momentum from the MCH track
     double pRatio = mftTrackProp.p() / mchTrackAtMFT.p();
@@ -932,7 +1021,7 @@ struct GlobalMuonMatching {
                                          collision.covXX(),
                                          collision.covYY());
 
-    return mExtrap.MCHtoFwd(mftTrackProp);
+    return MCHtoFwd(mftTrackProp);
   }
 
   // tag muons based on the track quality and the track position at the front and back MFT planes
@@ -970,16 +1059,16 @@ struct GlobalMuonMatching {
       }
 
       // propagate MCH track to the vertex
-      auto mchTrackAtVertex = VarManager::PropagateMuon(muonTrack, collision, VarManager::kToVertex);
+      o2::track::TrackParCovFwd mchTrackAtVertex = VarManager::PropagateMuon(muonTrack, collision, VarManager::kToVertex);
 
       // propagate the track from the vertex to the first MFT plane
-      const auto& extrapToMFTfirst = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[0]);
+      const auto& extrapToMFTfirst = propagateToZMchPar(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[0]);
       double rFront = std::sqrt(extrapToMFTfirst.getX() * extrapToMFTfirst.getX() + extrapToMFTfirst.getY() * extrapToMFTfirst.getY());
       if (rFront < cfgMuonTaggingRadiusAtMftFrontLow.value || rFront > cfgMuonTaggingRadiusAtMftFrontUp.value)
         continue;
 
       // propagate the track from the vertex to the last MFT plane
-      const auto& extrapToMFTlast = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[9]);
+      const auto& extrapToMFTlast = propagateToZMchPar(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[9]);
       double rBack = std::sqrt(extrapToMFTlast.getX() * extrapToMFTlast.getX() + extrapToMFTlast.getY() * extrapToMFTlast.getY());
       if (rBack < cfgMuonTaggingRadiusAtMftBackLow.value || rBack > cfgMuonTaggingRadiusAtMftBackUp.value)
         continue;
@@ -1114,7 +1203,7 @@ struct GlobalMuonMatching {
             collisionInfo.matchingCandidates[mchTrackIndex].emplace_back(MatchingCandidate{
               mftTrack.globalIndex()});
           }
-         }
+        }
       }
     }
   }
@@ -1161,8 +1250,8 @@ struct GlobalMuonMatching {
         }
         auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrack.globalIndex()]);
 
-        auto mftTrackProp = fwdToTrackPar(mftTrack, mftTrackCov);
-        auto mchTrackProp = fwdToTrackPar(mchTrack, mchTrack);
+        auto mftTrackProp = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
+        auto mchTrackProp = fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack);
 
         if (matchingPlaneZEffective < 0.) {
           mftTrackProp = propagateToMatchingPlaneMft(mchTrack, mftTrack, mftTrackCov, collision, matchingPlaneZEffective, extrapMethodEffective);
@@ -1215,22 +1304,23 @@ struct GlobalMuonMatching {
       auto collision = collisions.rawIteratorAt(mchTrack.collisionId());
 
       for (const auto& candidate : candidatesVector) {
+        auto const& muonTrack = (candidate.muonTrackId >= 0) ? muonTracks.rawIteratorAt(candidate.muonTrackId) : mchTrack;
         auto const& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
         if (mftTrackCovs.count(mftTrack.globalIndex()) < 1) {
           continue;
         }
         auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrack.globalIndex()]);
 
-        auto mftTrackProp = fwdToTrackPar(mftTrack, mftTrackCov);
-        auto mchTrackProp = fwdToTrackPar(mchTrack, mchTrack);
+        auto mftTrackProp = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
+        auto mchTrackProp = fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack);
 
         if (matchingPlaneZ < 0.) {
-          mftTrackProp = propagateToZMft(mftTrackProp, matchingPlaneZ);
-          mchTrackProp = propagateToZMch(mchTrackProp, matchingPlaneZ);
+          mftTrackProp = propagateToZMftPar(mftTrackProp, matchingPlaneZ);
+          mchTrackProp = propagateToZMchPar(mchTrackProp, matchingPlaneZ);
         }
 
         std::vector<float> output;
-        std::vector<float> inputML = mlResponse.getInputFeatures(mchTrack, mftTrack, mchTrack, mftTrackProp, mchTrackProp, collision);
+        std::vector<float> inputML = mlResponse.getInputFeatures(muonTrack, mftTrack, mchTrack, mftTrackProp, mchTrackProp, collision);
         mlResponse.isSelectedMl(inputML, 0, output);
         float matchScore = output[0];
 
@@ -1383,7 +1473,6 @@ struct GlobalMuonMatching {
             fillCandidateFwdTrack(collision, track, gmmMchTrackId, mftTrack, mftCovs, candidate, isTagged);
           }
         }
-        continue;
       }
 
       if (cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
@@ -1445,15 +1534,18 @@ struct GlobalMuonMatching {
     mFwdTrackToGmmCandTrkIndex.clear();
 
     LOGF(info, "Filling coll");
-    fillCollisions(collisions, bcs, muonTracks, mftTracks, mftCovs, fCollisionInfos);
+    CollisionInfos collisionInfos;
+    fillCollisions(collisions, bcs, muonTracks, mftTracks, mftCovs, collisionInfos);
 
     LOGF(info, "processing collisions");
-    for (auto const& [collisionIndex, collisionInfo] : fCollisionInfos) {
+    for (auto const& [collisionIndex, collisionInfo] : collisionInfos) {
       processCollision(collisionInfo, collisions, bcs, muonTracks, mftTracks, mftCovs);
     }
 
     LOGF(info, "Filling tables");
+    // fill table with track/candidates index mapping
     fillFwdTrkMatchCands(muonTracks);
+    // fill track tables
     fillGmmCandidateFwdTracks(collisions, muonTracks, mftTracks, mftCovs);
   }
 
