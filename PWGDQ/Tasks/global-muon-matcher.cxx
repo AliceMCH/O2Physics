@@ -173,6 +173,21 @@ struct GlobalMuonMatching {
     Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                            // 6 for pp, 4 for PbPb
   } configMchRealign;
 
+  ////   Variables for MFT alignment corrections
+  struct : ConfigurableGroup {
+    Configurable<bool> cfgEnableMftAlignmentCorrections{"cfgEnableMFTAlignmentCorrections", true, "Enable alignment corrections for the MFT tracks"};
+    // slope corrections
+    Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", (-0.0006696 - 0.0005621) / 2.f, "MFT X slope correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", (0.00105 + 0.001007) / 2.f, "MFT X slope correction - bottom half"};
+    Configurable<float> cfgMFTAlignmentCorrYSlopeTop{"cfgMFTAlignmentCorrYSlopeTop", (-0.002299 - 0.002442) / 2.f, "MFT Y slope correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrYSlopeBottom{"cfgMFTAlignmentCorrYSlopeBottom", (-0.0005339 - 0.0006921) / 2.f, "MFT Y slope correction - bottom half"};
+    // offset corrections
+    Configurable<float> cfgMFTAlignmentCorrXOffsetTop{"cfgMFTAlignmentCorrXOffsetTop", 0.f, "MFT X offset correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrXOffsetBottom{"cfgMFTAlignmentCorrXOffsetBottom", 0.f, "MFT X offset correction - bottom half"};
+    Configurable<float> cfgMFTAlignmentCorrYOffsetTop{"cfgMFTAlignmentCorrYOffsetTop", 0.f, "MFT Y offset correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrYOffsetBottom{"cfgMFTAlignmentCorrYOffsetBottom", 0.f, "MFT Y offset correction - bottom half"};
+  } configMftAlignmentCorrections;
+
   // Variables for CCDB objects access and retrieval
   struct : ConfigurableGroup {
     Configurable<std::string> cfgCcdbUrl{"cfgCcdbUrl", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
@@ -282,7 +297,9 @@ struct GlobalMuonMatching {
     int nClusters{-1};
     bool removable{false};
   };
+
   std::unordered_map<int64_t, TrackParExt> mMchTrackPars;
+  std::unordered_map<int64_t, TrackParExt> mMftTrackPars;
 
   std::unordered_map<int64_t, int32_t> mftTrackCovs;
 
@@ -918,12 +935,12 @@ struct GlobalMuonMatching {
     storeFwdTrackCovariance(trackPar.getCovariances());
   }
 
-  template <class TCOLLISION, class TMCH, class TMFT, class CMFT>
-  void fillCandidateFwdTrack(TCOLLISION const& collision,
-                             TMCH const& mchTrack,
+  template <class TMCH, class TMFT>
+  void fillCandidateFwdTrack(TMCH const& mchTrack,
+                             TrackParExt const& mchPar,
                              int32_t gmmMchTrackId,
                              TMFT const& mftTrack,
-                             CMFT const& mftCovs,
+                             TrackParExt const& mftPar,
                              const MatchingCandidate& candidate,
                              bool isTagged)
   {
@@ -934,25 +951,22 @@ struct GlobalMuonMatching {
     constexpr uint8_t candidateTrackType = static_cast<uint8_t>(ForwardTrackTypeEnum::GlobalForwardTrack);
     const float bz = static_cast<float>(mBzAtMftCenter);
 
-    const auto propmuonAtPV = o2::aod::fwdtrackutils::propagateMuon(mchTrack, mchTrack, collision, propagationPoint::kToVertex, matchingZ, bz);
+    auto propmuonAtMft = FwdtoMCH(mchPar);
+    o2::mch::TrackExtrap::extrapToVertex(propmuonAtMft,
+                                         mftPar.getX(),
+                                         mftPar.getY(),
+                                         mftPar.getZ(),
+                                         mftPar.getSigma2X(),
+                                         mftPar.getSigma2Y());
 
-    o2::track::TrackParCovFwd mftPar = o2::aod::fwdtrackutils::getTrackParCovFwdShift(mftTrack, 0.f);
-    if (mftTrackCovs.count(mftTrack.globalIndex()) > 0) {
-      const auto& mftCov = mftCovs.rawIteratorAt(mftTrackCovs.at(mftTrack.globalIndex()));
-      mftPar = o2::aod::fwdtrackutils::getTrackParCovFwd(mftTrack, mftCov);
-    }
+    const auto globalMuonRefit = o2::aod::fwdtrackutils::refitGlobalMuonCov(MCHtoFwd(propmuonAtMft), mftPar);
 
-    const auto globalMuonRefit = o2::aod::fwdtrackutils::refitGlobalMuonCov(propmuonAtPV, mftPar);
-
-    int8_t nClusters = mchTrack.nClusters();
-    if constexpr (requires { mftTrack.nClusters(); }) {
-      nClusters = static_cast<int8_t>(std::min(127, static_cast<int>(mchTrack.nClusters()) + static_cast<int>(mftTrack.nClusters())));
-    }
+    int8_t nClusters = static_cast<int8_t>(std::min(127, static_cast<int>(mchPar.getNClusters()) + static_cast<int>(mftPar.getNClusters())));
 
     const float chi2 = static_cast<float>(mchTrack.chi2());
     const int32_t collisionId = mchTrack.has_collision() ? mchTrack.collisionId() : -1;
 
-    bool isRemovable = false;
+    bool isRemovable = mchPar.isRemovable();
 
     gmCandidateFwdTracks(
       collisionId,
@@ -1147,7 +1161,7 @@ struct GlobalMuonMatching {
         // initialize the MCH track parameters, which will be updated by the realignment if enabled
         auto trackParIt = mMchTrackPars.find(mchTrackIndex);
         if (mMchTrackPars.find(mchTrackIndex) == mMchTrackPars.end()) {
-          mMchTrackPars.emplace(mchTrackIndex, TrackParExt(fwdtrackutils::getTrackParCovFwd(muonTrack, muonTrack), muonTrack.nClusters())).first;
+          mMchTrackPars.emplace(mchTrackIndex, TrackParExt(fwdtrackutils::getTrackParCovFwd(muonTrack, muonTrack), muonTrack.nClusters()));
         }
       }
 
@@ -1163,6 +1177,12 @@ struct GlobalMuonMatching {
         int64_t mftTrackIndex = mftTrack.globalIndex();
         if (std::find(collisionInfo.mftTracks.begin(), collisionInfo.mftTracks.end(), mftTrackIndex) == collisionInfo.mftTracks.end()) {
           collisionInfo.mftTracks.push_back(mftTrackIndex);
+        }
+
+        // initialize the MFT track parameters, which will be updated by the alignment corrections if enabled
+        if (mftTrackCovs.count(mftTrackIndex) >= 0) {
+          auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrackIndex]);
+          mMftTrackPars.emplace(mftTrackIndex, TrackParExt(fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov), mftTrack.nClusters()));
         }
       }
 
@@ -1213,6 +1233,50 @@ struct GlobalMuonMatching {
           }
         }
       }
+    }
+  }
+
+  template <typename TMFT, typename TMFTCOV>
+  o2::track::TrackParCovFwd TransformMFT(TMFT& mftTrack, TMFTCOV const& mftTrackCov)
+  {
+    auto track = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov));
+
+    double z = track.getZ();
+    // double dZ = zMCH - z;
+    double x = track.getNonBendingCoor();
+    double y = track.getBendingCoor();
+    double xSlope = track.getNonBendingSlope();
+    double ySlope = track.getBendingSlope();
+
+    double xSlopeCorrection = (y > 0) ? configMftAlignmentCorrections.cfgMFTAlignmentCorrXSlopeTop : configMftAlignmentCorrections.cfgMFTAlignmentCorrXSlopeBottom;
+    double xCorrection = xSlopeCorrection * z +
+                         ((y > 0) ? configMftAlignmentCorrections.cfgMFTAlignmentCorrXOffsetTop : configMftAlignmentCorrections.cfgMFTAlignmentCorrXOffsetBottom);
+    double xNew = x + xCorrection;
+    double xSlopeNew = xSlope + xSlopeCorrection;
+
+    track.setNonBendingCoor(xNew);
+    track.setNonBendingSlope(xSlopeNew);
+
+    double ySlopeCorrection = (y > 0) ? configMftAlignmentCorrections.cfgMFTAlignmentCorrYSlopeTop : configMftAlignmentCorrections.cfgMFTAlignmentCorrYSlopeBottom;
+    double yCorrection = ySlopeCorrection * z +
+                         ((y > 0) ? configMftAlignmentCorrections.cfgMFTAlignmentCorrYOffsetTop : configMftAlignmentCorrections.cfgMFTAlignmentCorrYOffsetBottom);
+    track.setBendingCoor(y + yCorrection);
+    track.setBendingSlope(ySlope + ySlopeCorrection);
+
+    return MCHtoFwd(track);
+  }
+
+  template <typename TMFTs, typename TMFTCOVs>
+  void runMftRealignment(TMFTs const& mftTracks, TMFTCOVs const& mftCovs)
+  {
+    for (const auto& mftTrack : mftTracks) {
+      auto mftTrackIndex = mftTrack.globalIndex();
+      if (mftTrackCovs.count(mftTrackIndex) < 0) {
+        continue;
+      }
+
+      auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrackIndex]);
+      mMftTrackPars[mftTrackIndex] = TransformMFT(mftTrack, mftTrackCov);
     }
   }
 
@@ -1327,13 +1391,12 @@ struct GlobalMuonMatching {
       auto collision = collisions.rawIteratorAt(mchTrack.collisionId());
 
       for (const auto& candidate : candidatesVector) {
-        auto const& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
-        if (mftTrackCovs.count(mftTrack.globalIndex()) < 1) {
+        auto mftTrackParIt = mMftTrackPars.find(candidate.mftTrackId);
+        if (mftTrackParIt == mMftTrackPars.end()) {
           continue;
         }
-        auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrack.globalIndex()]);
 
-        auto mftTrackProp = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
+        o2::track::TrackParCovFwd mftTrackProp = mftTrackParIt->second;
         o2::track::TrackParCovFwd mchTrackProp = mchTrackParIt->second;
 
         if (matchingPlaneZEffective < 0.) {
@@ -1396,12 +1459,12 @@ struct GlobalMuonMatching {
       for (const auto& candidate : candidatesVector) {
         auto const& muonTrack = (candidate.muonTrackId >= 0) ? muonTracks.rawIteratorAt(candidate.muonTrackId) : mchTrack;
         auto const& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
-        if (mftTrackCovs.count(mftTrack.globalIndex()) < 1) {
+        auto mftTrackParIt = mMftTrackPars.find(candidate.mftTrackId);
+        if (mftTrackParIt == mMftTrackPars.end()) {
           continue;
         }
-        auto const& mftTrackCov = mftCovs.rawIteratorAt(mftTrackCovs[mftTrack.globalIndex()]);
 
-        auto mftTrackProp = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
+        o2::track::TrackParCovFwd mftTrackProp = mftTrackParIt->second;
         o2::track::TrackParCovFwd mchTrackProp = mchTrackParIt->second;
 
         if (matchingPlaneZ < 0.) {
@@ -1450,6 +1513,10 @@ struct GlobalMuonMatching {
 
     if (configMchRealign.cfgEnableMCHRealign.value) {
       runMuonRealignment(muonTracks, clusters);
+    }
+
+    if (configMftAlignmentCorrections.cfgEnableMftAlignmentCorrections) {
+      runMftRealignment(mftTracks, mftCovs);
     }
 
     std::vector<int64_t> taggedMuons;
@@ -1573,8 +1640,11 @@ struct GlobalMuonMatching {
           const auto& collision = collisions.rawIteratorAt(track.collisionId());
           const bool isTagged = mMchTrackIsTagged[mchTrackIndex];
           for (const auto& candidate : candidateIterator->second) {
-            const auto& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
-            fillCandidateFwdTrack(collision, track, gmmMchTrackId, mftTrack, mftCovs, candidate, isTagged);
+            auto mftTrackParIt = mMftTrackPars.find(candidate.mftTrackId);
+            if (mftTrackParIt != mMftTrackPars.end()) {
+              const auto& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
+              fillCandidateFwdTrack(track, mchTrackParIt->second, gmmMchTrackId, mftTrack, mftTrackParIt->second, candidate, isTagged);
+            }
           }
         }
       }
