@@ -267,10 +267,7 @@ struct GlobalMuonMatching {
     }
     TrackParExt& operator=(const TrackParExt& tpe)
     {
-      auto* tpf = dynamic_cast<const o2::track::TrackParCovFwd*>(&tpe);
-      if (tpf) {
-        *this = *tpf;
-      }
+      o2::track::TrackParCovFwd::operator=(tpe);
       nClusters = tpe.getNClusters();
       removable = tpe.isRemovable();
       return *this;
