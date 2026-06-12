@@ -134,10 +134,6 @@ struct GlobalMuonMatching {
   static constexpr double SlopeResolutionZ = 535.;
   static constexpr int MatchingDegreesOfFreedom = 5;
   static constexpr float MatchingScoreChi2Max = 50.f;
-  static constexpr int ExtrapolationMethodStandard = 0;
-  static constexpr int ExtrapolationMethodMftFirstPoint = 2;
-  static constexpr int ExtrapolationMethodVertex = 3;
-  static constexpr int ExtrapolationMethodMftDca = 4;
   static constexpr float MatchingPlaneDefaultZ = -77.5;
 
   struct MatchingCandidate {
@@ -148,66 +144,53 @@ struct GlobalMuonMatching {
     int matchRanking{-1};
   };
 
-
-  ////   Variables for selecting muon tracks
-  Configurable<float> cfgPMchLow{"cfgPMchLow", 0.0f, ""};
-  Configurable<float> cfgPtMchLow{"cfgPtMchLow", 0.7f, ""};
-  Configurable<float> cfgEtaMchLow{"cfgEtaMchLow", -4.0f, ""};
-  Configurable<float> cfgEtaMchUp{"cfgEtaMchUp", -2.5f, ""};
-  Configurable<float> cfgRabsLow{"cfgRabsLow", 17.6f, ""};
-  Configurable<float> cfgRabsUp{"cfgRabsUp", 89.5f, ""};
-  Configurable<float> cfgPdcaUp{"cfgPdcaUp", 6.f, ""};
-  Configurable<float> cfgTrackChi2MchUp{"cfgTrackChi2MchUp", 5.f, ""};
-
-  ////   Variables for selecting mft tracks
-  Configurable<float> cfgEtaMftLow{"cfgEtaMftLow", -3.6f, ""};
-  Configurable<float> cfgEtaMftUp{"cfgEtaMftUp", -2.5f, ""};
-
   ////   Variables for selecting tagged muons
-  Configurable<int> cfgMuonTaggingNCrossedMftPlanesLow{"cfgMuonTaggingNCrossedMftPlanesLow", 5, ""};
-  Configurable<float> cfgMuonTaggingTrackChi2MchUp{"cfgMuonTaggingTrackChi2MchUp", 5.f, ""};
-  Configurable<float> cfgMuonTaggingPMchLow{"cfgMuonTaggingPMchLow", 0.0f, ""};
-  Configurable<float> cfgMuonTaggingPtMchLow{"cfgMuonTaggingPtMchLow", 0.7f, ""};
-  Configurable<float> cfgMuonTaggingEtaMchLow{"cfgMuonTaggingEtaMchLow", -3.6f, ""};
-  Configurable<float> cfgMuonTaggingEtaMchUp{"cfgMuonTaggingEtaMchUp", -2.5f, ""};
-  Configurable<float> cfgMuonTaggingRabsLow{"cfgMuonTaggingRabsLow", 17.6f, ""};
-  Configurable<float> cfgMuonTaggingRabsUp{"cfgMuonTaggingRabsUp", 89.5f, ""};
-  Configurable<float> cfgMuonTaggingPdcaUp{"cfgMuonTaggingPdcaUp", 4.f, ""};
-  Configurable<float> cfgMuonTaggingRadiusAtMftFrontLow{"cfgMuonTaggingRadiusAtMftFrontLow", 3.f, ""};
-  Configurable<float> cfgMuonTaggingRadiusAtMftFrontUp{"cfgMuonTaggingRadiusAtMftFrontUp", 9.f, ""};
-  Configurable<float> cfgMuonTaggingRadiusAtMftBackLow{"cfgMuonTaggingRadiusAtMftBackLow", 5.f, ""};
-  Configurable<float> cfgMuonTaggingRadiusAtMftBackUp{"cfgMuonTaggingRadiusAtMftBackUp", 12.f, ""};
+  struct : ConfigurableGroup {
+    Configurable<int> cfgMuonTaggingNCrossedMftPlanesLow{"cfgMuonTaggingNCrossedMftPlanesLow", 5, ""};
+    Configurable<float> cfgMuonTaggingTrackChi2MchUp{"cfgMuonTaggingTrackChi2MchUp", 5.f, ""};
+    Configurable<float> cfgMuonTaggingPMchLow{"cfgMuonTaggingPMchLow", 0.0f, ""};
+    Configurable<float> cfgMuonTaggingPtMchLow{"cfgMuonTaggingPtMchLow", 0.7f, ""};
+    Configurable<float> cfgMuonTaggingEtaMchLow{"cfgMuonTaggingEtaMchLow", -3.6f, ""};
+    Configurable<float> cfgMuonTaggingEtaMchUp{"cfgMuonTaggingEtaMchUp", -2.5f, ""};
+    Configurable<float> cfgMuonTaggingRabsLow{"cfgMuonTaggingRabsLow", 17.6f, ""};
+    Configurable<float> cfgMuonTaggingRabsUp{"cfgMuonTaggingRabsUp", 89.5f, ""};
+    Configurable<float> cfgMuonTaggingPdcaUp{"cfgMuonTaggingPdcaUp", 4.f, ""};
+    Configurable<float> cfgMuonTaggingRadiusAtMftFrontLow{"cfgMuonTaggingRadiusAtMftFrontLow", 3.f, ""};
+    Configurable<float> cfgMuonTaggingRadiusAtMftFrontUp{"cfgMuonTaggingRadiusAtMftFrontUp", 9.f, ""};
+    Configurable<float> cfgMuonTaggingRadiusAtMftBackLow{"cfgMuonTaggingRadiusAtMftBackLow", 5.f, ""};
+    Configurable<float> cfgMuonTaggingRadiusAtMftBackUp{"cfgMuonTaggingRadiusAtMftBackUp", 12.f, ""};
+  } configMuonTagging;
 
-  ////   Variables for ccdb
-  Configurable<bool> cfgEnableMCHRealign{"cfgEnableMCHRealign", true, "Enable re-alignment of MCH clusters and tracks"};
-  Configurable<std::string> ccdbUrl{"ccdbUrl", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
-  Configurable<std::string> grpPath{"grpPath", "GLO/GRP/GRP", "Path of the grp file"};
-  Configurable<std::string> grpMagPath{"grpMagPath", "GLO/Config/GRPMagField", "CCDB path of the GRPMagField object"};
-  Configurable<std::string> geoPath{"geoPath", "GLO/Config/GeometryAligned", "Path of the geometry file"};
-  Configurable<std::string> geoRefPath{"geoRefPath", "GLO/Config/GeometryAligned", "Path of the reference geometry file"};
-  Configurable<std::string> geoNewPath{"geoNewPath", "GLO/Config/GeometryAligned", "Path of the new geometry file"};
-  Configurable<int64_t> nolaterthanRef{"ccdb-no-later-than-ref", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of reference basis"};
-  Configurable<int64_t> nolaterthanNew{"ccdb-no-later-than-new", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of new basis"};
-  Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", 0.04, "Chamber resolution along X configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
-  Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", 0.04, "Chamber resolution along Y configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
-  Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                            // 6 for pp, 4 for PbPb
+  ////   Variables for MCH realignment
+  struct : ConfigurableGroup {
+    Configurable<bool> cfgEnableMCHRealign{"cfgEnableMCHRealign", true, "Enable re-alignment of MCH clusters and tracks"};
+    Configurable<std::string> cfgGeoRefPath{"cfgGeoRefPath", "GLO/Config/GeometryAligned", "Path of the reference geometry file"};
+    Configurable<std::string> cfgGeoNewPath{"cfgGeoNewPath", "GLO/Config/GeometryAligned", "Path of the new geometry file"};
+    Configurable<int64_t> nolaterthanRef{"ccdb-no-later-than-ref", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of reference basis"};
+    Configurable<int64_t> nolaterthanNew{"ccdb-no-later-than-new", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of new basis"};
+    Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", 0.04, "Chamber resolution along X configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", 0.04, "Chamber resolution along Y configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                            // 6 for pp, 4 for PbPb
+  } configMchRealign;
 
-  // CCDB connection configurables
+  // Variables for CCDB objects access and retrieval
   struct : ConfigurableGroup {
     Configurable<std::string> cfgCcdbUrl{"cfgCcdbUrl", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
     Configurable<int64_t> cfgCcdbNoLaterThan{"cfgCcdbNoLaterThan", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object"};
     Configurable<std::string> cfgGrpPath{"cfgGrpPath", "GLO/GRP/GRP", "Path of the grp file"};
     Configurable<std::string> cfgGeoPath{"cfgGeoPath", "GLO/Config/GeometryAligned", "Path of the geometry file"};
-    Configurable<std::string> cfgGrpmagPath{"cfgGrpmagPath", "GLO/Config/GRPMagField", "CCDB path of the GRPMagField object"};
+    Configurable<std::string> cfgGrpMagPath{"cfgGrpMagPath", "GLO/Config/GRPMagField", "CCDB path of the GRPMagField object"};
   } configCcdb;
 
   // Matching strategy for the *custom* matches (production baseline is always computed).
   // 0 = chi2 (runChi2Matching), 1 = ML (runMlMatching)
-  Configurable<int> cfgCustomMatchingStrategy{"cfgCustomMatchingStrategy", 0, "0=chi2, 1=ML for custom matches"};
-  Configurable<bool> cfgProduceCandidateFwdTracks{"cfgProduceCandidateFwdTracks", true, "Produce GMMCANDTRK/GMMCANDTRKCOV tables (all FwdTracks + match candidates)"};
-  Configurable<bool> cfgIncludeGlobalMuonsInFwdTracks{"cfgIncludeGlobalMuonsInFwdTracks", false, "Include MFT-MCH-MID global muons in GMMCANDTRK table"};
-  Configurable<int> cfgMaxCandidatesPerMchTrack{"cfgMaxCandidatesPerMchTrack", -1, "Maximum number of match candidates stored per MCH track (-1: no limit)"};
-  Configurable<bool> cfgMatchAllTracks{"cfgMatchAllTracks", false, "If true the matching is performed considering all the MFT tracks for which the covariances are available; if false the matching is performed considering only the global forward tracks stored at production"};
+  struct : ConfigurableGroup {
+    Configurable<int> cfgCustomMatchingStrategy{"cfgCustomMatchingStrategy", 0, "0=chi2, 1=ML for custom matches"};
+    Configurable<bool> cfgProduceCandidateFwdTracks{"cfgProduceCandidateFwdTracks", true, "Produce GMMCANDTRK/GMMCANDTRKCOV tables (all FwdTracks + match candidates)"};
+    Configurable<bool> cfgIncludeGlobalMuonsInFwdTracks{"cfgIncludeGlobalMuonsInFwdTracks", false, "Include MFT-MCH-MID global muons in GMMCANDTRK table"};
+    Configurable<int> cfgMaxCandidatesPerMchTrack{"cfgMaxCandidatesPerMchTrack", -1, "Maximum number of match candidates stored per MCH track (-1: no limit)"};
+    Configurable<bool> cfgMatchAllTracks{"cfgMatchAllTracks", false, "If true the matching is performed considering all the MFT tracks for which the covariances are available; if false the matching is performed considering only the global forward tracks stored at production"};
+  } configMatching;
 
   double mBzAtMftCenter{0};
 
@@ -219,7 +202,6 @@ struct GlobalMuonMatching {
     Configurable<std::string> cfgChi2FunctionLabel{"cfgChi2FunctionLabel", std::string{"ProdAll"}, "Text label identifying the chi2 matching method"};
     Configurable<std::string> cfgChi2FunctionName{"cfgChi2FunctionName", std::string{"prod"}, "Name of the chi2 matching function"};
     Configurable<float> cfgChi2FunctionMatchingPlaneZ{"cfgChi2FunctionMatchingPlaneZ", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
-    Configurable<int> cfgChi2MatchingExtrapMethod{"cfgChi2MatchingExtrapMethod", 0, "Method for MCH track extrapolation to matching plane"};
   } configChi2MatchingOptions;
 
   // ML interface (single configurable model)
@@ -229,7 +211,6 @@ struct GlobalMuonMatching {
     Configurable<std::string> cfgMlModelName{"cfgMlModelName", "model.onnx", "ONNX file name (if not from CCDB full path)"};
     Configurable<std::vector<std::string>> cfgMlInputFeatures{"cfgMlInputFeatures", std::vector<std::string>{"chi2MCHMFT"}, "Names of ML model input features"};
     Configurable<float> cfgMlModelMatchingPlaneZ{"cfgMlModelMatchingPlaneZ", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
-    Configurable<int> cfgMlMatchingExtrapMethod{"cfgMlMatchingExtrapMethod", 0, "Method for MCH track extrapolation to matching plane"};
   } configMlOptions;
 
   std::vector<double> binsPtMl;
@@ -238,7 +219,6 @@ struct GlobalMuonMatching {
   bool hasActiveChi2Matching{false};
   std::string activeChi2FunctionName;
   double activeChi2MatchingPlaneZ{0.};
-  int activeChi2ExtrapMethod{0};
 
   bool hasActiveMlMatching{false};
   o2::analysis::MlResponseMFTMuonMatch<float> activeMlResponse;
@@ -279,6 +259,22 @@ struct GlobalMuonMatching {
     TrackParExt(o2::track::TrackParCovFwd const& t, int nc = -1, bool r = false)
     : TrackParCovFwd(t), nClusters(nc), removable(r) {}
     ~TrackParExt() = default;
+
+    TrackParExt& operator=(const TrackParCovFwd& tpf)
+    {
+      o2::track::TrackParCovFwd::operator=(tpf);
+      return *this;
+    }
+    TrackParExt& operator=(const TrackParExt& tpe)
+    {
+      auto* tpf = dynamic_cast<const o2::track::TrackParCovFwd*>(&tpe);
+      if (tpf) {
+        *this = *tpf;
+      }
+      nClusters = tpe.getNClusters();
+      removable = tpe.isRemovable();
+      return *this;
+    }
 
     void setNClusters(int n) { nClusters = n; }
     int getNClusters() const { return nClusters; }
@@ -572,21 +568,21 @@ struct GlobalMuonMatching {
     std::map<std::string, std::string> metadata;
     auto soreor = o2::ccdb::BasicCCDBManager::getRunDuration(fCCDBApi, mRunNumber);
     auto ts = soreor.first;
-    auto grpmag = fCCDBApi.retrieveFromTFileAny<o2::parameters::GRPMagField>(grpMagPath, metadata, ts);
+    auto grpmag = fCCDBApi.retrieveFromTFileAny<o2::parameters::GRPMagField>(configCcdb.cfgGrpMagPath, metadata, ts);
     o2::base::Propagator::initFieldFromGRP(grpmag);
     LOGF(info, "Set field for muons");
     VarManager::SetupMuonMagField();
     if (!o2::base::GeometryManager::isGeometryLoaded()) {
-      ccdbManager->get<TGeoManager>(geoPath);
+      ccdbManager->get<TGeoManager>(configCcdb.cfgGeoPath);
     }
     mch::TrackExtrap::setField();
     mch::TrackExtrap::useExtrapV2();
 
     // Load geometry information from CCDB/local
-    LOGF(info, "Loading reference aligned geometry from CCDB no later than %d", nolaterthanRef.value);
-    ccdbManager->setCreatedNotAfter(nolaterthanRef.value); // this timestamp has to be consistent with what has been used in reco
-    geoRef = ccdbManager->getForTimeStamp<TGeoManager>(geoRefPath, bc.timestamp());
-    ccdbManager->clearCache(geoRefPath);
+    LOGF(info, "Loading reference aligned geometry from CCDB no later than %d", configMchRealign.nolaterthanRef.value);
+    ccdbManager->setCreatedNotAfter(configMchRealign.nolaterthanRef.value); // this timestamp has to be consistent with what has been used in reco
+    geoRef = ccdbManager->getForTimeStamp<TGeoManager>(configMchRealign.cfgGeoRefPath, bc.timestamp());
+    ccdbManager->clearCache(configMchRealign.cfgGeoRefPath);
     if (geoRef != nullptr) {
       transformation = mch::geo::transformationFromTGeoManager(*geoRef);
     } else {
@@ -597,10 +593,10 @@ struct GlobalMuonMatching {
       transformRef[iDEN] = transformation(iDEN);
     }
 
-    LOGF(info, "Loading new aligned geometry from CCDB no later than %d", nolaterthanNew.value);
-    ccdbManager->setCreatedNotAfter(nolaterthanNew.value); // make sure this timestamp can be resolved regarding the reference one
-    geoNew = ccdbManager->getForTimeStamp<TGeoManager>(geoNewPath, bc.timestamp());
-    ccdbManager->clearCache(geoNewPath);
+    LOGF(info, "Loading new aligned geometry from CCDB no later than %d", configMchRealign.nolaterthanNew.value);
+    ccdbManager->setCreatedNotAfter(configMchRealign.nolaterthanNew.value); // make sure this timestamp can be resolved regarding the reference one
+    geoNew = ccdbManager->getForTimeStamp<TGeoManager>(configMchRealign.cfgGeoNewPath, bc.timestamp());
+    ccdbManager->clearCache(configMchRealign.cfgGeoNewPath);
     if (geoNew != nullptr) {
       transformation = mch::geo::transformationFromTGeoManager(*geoNew);
     } else {
@@ -729,47 +725,39 @@ struct GlobalMuonMatching {
   void init(o2::framework::InitContext&)
   {
     // Load geometry
-    ccdbManager->setURL(ccdbUrl);
+    ccdbManager->setURL(configCcdb.cfgCcdbUrl);
     ccdbManager->setCaching(true);
     ccdbManager->setLocalObjectValidityChecking();
-    fCCDBApi.init(ccdbUrl);
+    fCCDBApi.init(configCcdb.cfgCcdbUrl);
     mRunNumber = 0;
 
     // Configuration for track fitter
     const auto& trackerParam = mch::TrackerParam::Instance();
     trackFitter.setBendingVertexDispersion(trackerParam.bendingVertexDispersion);
-    trackFitter.setChamberResolution(cfgChamberResolutionX.value, cfgChamberResolutionY.value);
+    trackFitter.setChamberResolution(configMchRealign.cfgChamberResolutionX.value, configMchRealign.cfgChamberResolutionY.value);
     trackFitter.smoothTracks(true);
     trackFitter.useChamberResolution();
-    mImproveCutChi2 = 2. * cfgSigmaCutImprove.value * cfgSigmaCutImprove.value;
-
-    if (!o2::base::GeometryManager::isGeometryLoaded()) {
-      LOGF(info, "Load geometry from CCDB");
-      ccdbManager->get<TGeoManager>(geoPath);
-    }
+    mImproveCutChi2 = 2. * configMchRealign.cfgSigmaCutImprove.value * configMchRealign.cfgSigmaCutImprove.value;
 
     // Reset matching configuration, then populate only what we need.
     hasActiveChi2Matching = false;
     activeChi2FunctionName.clear();
     activeChi2MatchingPlaneZ = 0.;
-    activeChi2ExtrapMethod = 0;
 
     hasActiveMlMatching = false;
     activeMlMatchingPlaneZ = 0.;
 
-    if (cfgCustomMatchingStrategy.value == 0) {
+    if (configMatching.cfgCustomMatchingStrategy.value == 0) {
       // Matching functions (custom chi2)
       initMatchingFunctions();
       auto label = configChi2MatchingOptions.cfgChi2FunctionLabel.value;
       auto funcName = configChi2MatchingOptions.cfgChi2FunctionName.value;
       auto matchingPlaneZ = configChi2MatchingOptions.cfgChi2FunctionMatchingPlaneZ.value;
-      auto extrapMethod = configChi2MatchingOptions.cfgChi2MatchingExtrapMethod.value;
 
       if (label != "" && funcName != "") {
         hasActiveChi2Matching = true;
         activeChi2FunctionName = funcName;
         activeChi2MatchingPlaneZ = matchingPlaneZ;
-        activeChi2ExtrapMethod = extrapMethod;
       }
     } else {
       // Matching ML models (custom ML)
@@ -784,7 +772,6 @@ struct GlobalMuonMatching {
       auto inputFeatures = configMlOptions.cfgMlInputFeatures.value;
       auto modelName = configMlOptions.cfgMlModelName.value;
       auto matchingPlaneZ = configMlOptions.cfgMlModelMatchingPlaneZ.value;
-      auto extrapMethod = configMlOptions.cfgMlMatchingExtrapMethod.value;
 
       if (label != "" && modelPath != "" && !inputFeatures.empty() && modelName != "") {
         activeMlResponse.configure(binsPtMl, mycutsMl, cutDirMl, 1);
@@ -794,7 +781,6 @@ struct GlobalMuonMatching {
 
         hasActiveMlMatching = true;
         activeMlMatchingPlaneZ = matchingPlaneZ;
-        (void)extrapMethod;
       }
     }
   }
@@ -871,18 +857,6 @@ struct GlobalMuonMatching {
     }
 
     return true;
-  }
-
-  template <class T, class C>
-  bool isGoodMuon(const T& muonTrack, const C& collision)
-  {
-    return isGoodMuon(muonTrack, collision, cfgTrackChi2MchUp, cfgPMchLow, cfgPtMchLow, {cfgEtaMchLow, cfgEtaMchUp}, {cfgRabsLow, cfgRabsUp}, cfgPdcaUp);
-  }
-
-  template <class T, class C>
-  bool isGoodGlobalMuon(const T& muonTrack, const C& collision)
-  {
-    return isGoodMuon(muonTrack, collision, cfgTrackChi2MchUp, cfgPMchLow, cfgPtMchLow, {cfgEtaMftLow, cfgEtaMftUp}, {cfgRabsLow, cfgRabsUp}, cfgPdcaUp);
   }
 
   void storeFwdTrackCovariance(const SMatrix55Sym& cov)
@@ -1011,7 +985,7 @@ struct GlobalMuonMatching {
     storeFwdTrackCovariance(globalMuonRefit.getCovariances());
   }
 
-  o2::track::TrackParCovFwd propagateToZMchPar(const o2::track::TrackParCovFwd& muon, const double z)
+  o2::track::TrackParCovFwd propagateToZMch(const o2::track::TrackParCovFwd& muon, const double z)
   {
     auto mchTrack = FwdtoMCH(muon);
 
@@ -1029,171 +1003,25 @@ struct GlobalMuonMatching {
     return MCHtoFwd(mchTrack);
   }
 
-  template <typename T>
-  o2::track::TrackParCovFwd propagateToZMch(const T& muon, const double z)
-  {
-    double chi2 = muon.chi2();
-    SMatrix5 tpars(muon.x(), muon.y(), muon.phi(), muon.tgl(), muon.signed1Pt());
-    std::vector<double> v1{muon.cXX(), muon.cXY(), muon.cYY(), muon.cPhiX(), muon.cPhiY(),
-                           muon.cPhiPhi(), muon.cTglX(), muon.cTglY(), muon.cTglPhi(), muon.cTglTgl(),
-                           muon.c1PtX(), muon.c1PtY(), muon.c1PtPhi(), muon.c1PtTgl(), muon.c1Pt21Pt2()};
-    SMatrix55Sym tcovs(v1.begin(), v1.end());
-    o2::track::TrackParCovFwd fwdtrack{muon.z(), tpars, tcovs, chi2};
-
-    return propagateToZMchPar(fwdtrack, z);
-  }
-
-  o2::track::TrackParCovFwd propagateToZMftPar(const o2::track::TrackParCovFwd& mftTrack, const double z)
+  o2::track::TrackParCovFwd propagateToZMft(const o2::track::TrackParCovFwd& mftTrack, const double z)
   {
     o2::track::TrackParCovFwd trackExtrap{mftTrack};
     trackExtrap.propagateToZ(z, mBzAtMftCenter);
     return trackExtrap;
   }
 
-  template <typename TMFT, typename CMFT>
-  o2::track::TrackParCovFwd propagateToZMft(const TMFT& mftTrack, const CMFT& mftCov, const double z)
-  {
-    auto fwdtrack = fwdtrackutils::getTrackParCovFwd(mftTrack, mftCov);
-    return propagateToZMftPar(fwdtrack, z);
-  }
-
-  // method 0: standard extrapolation
-  // method 1: MFT extrapolation using MCH momentum
-  // method 2: MCH track extrapolation constrained to the first MFT track point, MFT extrapolation using MCH momentum
-  // method 3: MCH track extrapolation constrained to the collision point, MFT extrapolation using MCH momentum
-  template <typename TMCH, typename TMFT, typename CMFT, typename C>
-  o2::track::TrackParCovFwd propagateToMatchingPlaneMch(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
-  {
-    if (method == ExtrapolationMethodStandard || method == 1) {
-      // simple extrapolation upstream through the absorber
-      return propagateToZMch(mchTrack, z);
-    }
-
-    if (method == ExtrapolationMethodMftFirstPoint) {
-      // extrapolation to the first MFT point and then back to the matching plane
-      auto mftTrackPar = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
-      // std::cout << std::format("[propagateToMatchingPlaneMch] extrapolating to MFT: x={:0.3f} y={:0.3f} z={:0.3f}", mftTrackPar.getX(), mftTrackPar.getY(), mftTrackPar.getZ()) << std::endl;
-      auto mchTrackAtMFT = propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
-                                                mftTrackPar.getX(), mftTrackPar.getY(), mftTrackPar.getZ(),
-                                                mftTrackPar.getSigma2X(), mftTrackPar.getSigma2Y());
-      // std::cout << std::format("[propagateToMatchingPlaneMch] extrapolating to z={:0.3f}", z) << std::endl;
-      return propagateToZMchPar(mchTrackAtMFT, z);
-    }
-
-    if (method == ExtrapolationMethodVertex) {
-      // extrapolation to the vertex and then back to the matching plane
-      auto mchTrackAtVertex =  propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
-                                                    collision.posX(), collision.posY(), collision.posZ(),
-                                                    collision.covXX(), collision.covYY());
-      return propagateToZMchPar(mchTrackAtVertex, z);
-    }
-
-    if (method == ExtrapolationMethodMftDca) {
-      // extrapolation to the MFT DCA and then back to the matching plane
-      auto mftTrackDCA = propagateToZMftPar(fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov), collision.posZ());
-      auto mchTrackAtDCA = propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(mchTrack, mchTrack),
-                                                mftTrackDCA.getX(), mftTrackDCA.getY(), mftTrackDCA.getZ(),
-                                                mftTrackDCA.getSigma2X(), mftTrackDCA.getSigma2Y());
-      return propagateToZMchPar(mchTrackAtDCA, z);
-    }
-
-    return {};
-  }
-
-  template <typename TMCH, typename TMFT, typename CMFT, typename C>
-  o2::track::TrackParCovFwd propagateToMatchingPlaneMft(const TMCH& mchTrack, const TMFT& mftTrack, const CMFT& mftTrackCov, const C& collision, const double z, int method)
-  {
-    if (method == ExtrapolationMethodStandard) {
-      // extrapolation with MFT tools
-      return propagateToZMft(mftTrack, mftTrackCov, z);
-    }
-
-    if (method > 0) {
-      // extrapolation with MCH tools
-      auto mchTrackAtVertex = VarManager::PropagateMuon(mchTrack, collision, VarManager::kToVertex);
-      double pMCH = mchTrackAtVertex.getP();
-      double px = pMCH * std::sin(o2::constants::math::PIHalf - std::atan(mftTrack.tgl())) * std::cos(mftTrack.phi());
-      double py = pMCH * std::sin(o2::constants::math::PIHalf - std::atan(mftTrack.tgl())) * std::sin(mftTrack.phi());
-      double pt = std::hypot(px, py);
-      double sign = mchTrack.sign();
-
-      auto track = fwdtrackutils::getTrackParCovFwd(mftTrack, mftTrackCov);
-
-      // update momentum in track parameters and errors
-      auto newCov = track.getCovariances();
-      newCov(4, 4) = mchTrackAtVertex.getSigma2InvQPt();
-      track.setCovariances(newCov);
-      track.setInvQPt(sign / pt);
-
-      auto trackExt = FwdtoMCH(track);
-      o2::mch::TrackExtrap::extrapToZCov(trackExt, z);
-
-      return MCHtoFwd(trackExt);
-    }
-
-    return {};
-  }
-
-  o2::track::TrackParCovFwd propagateToVertexMch(const o2::track::TrackParCovFwd& muon,
-                                                       const double vx, const double vy, const double vz,
-                                                       const double covVx, const double covVy)
-  {
-    auto mchTrack = FwdtoMCH(muon);
-
-    o2::mch::TrackExtrap::extrapToVertex(mchTrack, vx, vy, vz, covVx, covVy);
-
-    return MCHtoFwd(mchTrack);
-  }
-
   template <class TMCH, class C>
   o2::track::TrackParCovFwd propagateToVertexMch(const TMCH& muon,
-                                                       const C& collision)
+                                                 const C& collision)
   {
-    return propagateToVertexMch(fwdtrackutils::getTrackParCovFwd(muon, muon),
-                                collision.posX(),
-                                collision.posY(),
-                                collision.posZ(),
-                                collision.covXX(),
-                                collision.covYY());
-  }
-
-  o2::track::TrackParCovFwd propagateToVertexMft(o2::track::TrackParCovFwd muon,
-                                                       const float vx, const float vy, const float vz,
-                                                       const float covVx, const float covVy)
-  {
-    auto geoMan = o2::base::GeometryManager::meanMaterialBudget(muon.getX(), muon.getY(), muon.getZ(), vx, vy, vz);
-    auto x2x0 = static_cast<float>(geoMan.meanX2X0);
-    muon.propagateToVtxhelixWithMCS(vz, {vx, vy}, {covVx, covVy}, mBzAtMftCenter, x2x0);
-
-    return muon;
-  }
-
-
-  template <typename TMCH, typename TMFT, class C>
-  o2::track::TrackParCovFwd propagateToVertexMft(const TMFT& mftTrack,
-                                                       const TMCH& mchTrack,
-                                                       const C& collision)
-  {
-    // extrapolation with MCH tools
-    auto mchTrackAtMFT = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(mchTrack));
-    o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackAtMFT, mftTrack.z());
-
-    auto mftTrackProp = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(mftTrack));
-
-    // update global track momentum from the MCH track
-    double pRatio = mftTrackProp.p() / mchTrackAtMFT.p();
-    double newInvBendMom = mftTrackProp.getInverseBendingMomentum() * pRatio;
-    mftTrackProp.setInverseBendingMomentum(newInvBendMom);
-    mftTrackProp.setCharge(mchTrackAtMFT.getCharge());
-
-    o2::mch::TrackExtrap::extrapToVertex(mftTrackProp,
+    auto mchTrack = FwdtoMCH(fwdtrackutils::getTrackParCovFwd(muon, muon));
+    o2::mch::TrackExtrap::extrapToVertex(mchTrack,
                                          collision.posX(),
                                          collision.posY(),
                                          collision.posZ(),
                                          collision.covXX(),
                                          collision.covYY());
-
-    return MCHtoFwd(mftTrackProp);
+    return MCHtoFwd(mchTrack);
   }
 
   // tag muons based on the track quality and the track position at the front and back MFT planes
@@ -1221,28 +1049,28 @@ struct GlobalMuonMatching {
 
       // select MCH tracks with strict quality cuts
       if (!isGoodMuon(muonTrack, collision,
-                      cfgMuonTaggingTrackChi2MchUp,
-                      cfgMuonTaggingPMchLow,
-                      cfgMuonTaggingPtMchLow,
-                      {cfgMuonTaggingEtaMchLow, cfgMuonTaggingEtaMchUp},
-                      {cfgMuonTaggingRabsLow, cfgMuonTaggingRabsUp},
-                      cfgMuonTaggingPdcaUp)) {
+                      configMuonTagging.cfgMuonTaggingTrackChi2MchUp,
+                      configMuonTagging.cfgMuonTaggingPMchLow,
+                      configMuonTagging.cfgMuonTaggingPtMchLow,
+                      {configMuonTagging.cfgMuonTaggingEtaMchLow, configMuonTagging.cfgMuonTaggingEtaMchUp},
+                      {configMuonTagging.cfgMuonTaggingRabsLow, configMuonTagging.cfgMuonTaggingRabsUp},
+                      configMuonTagging.cfgMuonTaggingPdcaUp)) {
         continue;
       }
 
       // propagate MCH track to the vertex
-      o2::track::TrackParCovFwd mchTrackAtVertex = VarManager::PropagateMuon(muonTrack, collision, VarManager::kToVertex);
+      auto mchTrackAtVertex = propagateToVertexMch(muonTrack, collision);
 
       // propagate the track from the vertex to the first MFT plane
-      const auto& extrapToMFTfirst = propagateToZMchPar(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[0]);
+      const auto& extrapToMFTfirst = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[0]);
       double rFront = std::sqrt(extrapToMFTfirst.getX() * extrapToMFTfirst.getX() + extrapToMFTfirst.getY() * extrapToMFTfirst.getY());
-      if (rFront < cfgMuonTaggingRadiusAtMftFrontLow.value || rFront > cfgMuonTaggingRadiusAtMftFrontUp.value)
+      if (rFront < configMuonTagging.cfgMuonTaggingRadiusAtMftFrontLow.value || rFront > configMuonTagging.cfgMuonTaggingRadiusAtMftFrontUp.value)
         continue;
 
       // propagate the track from the vertex to the last MFT plane
-      const auto& extrapToMFTlast = propagateToZMchPar(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[9]);
+      const auto& extrapToMFTlast = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[9]);
       double rBack = std::sqrt(extrapToMFTlast.getX() * extrapToMFTlast.getX() + extrapToMFTlast.getY() * extrapToMFTlast.getY());
-      if (rBack < cfgMuonTaggingRadiusAtMftBackLow.value || rBack > cfgMuonTaggingRadiusAtMftBackUp.value)
+      if (rBack < configMuonTagging.cfgMuonTaggingRadiusAtMftBackLow.value || rBack > configMuonTagging.cfgMuonTaggingRadiusAtMftBackUp.value)
         continue;
 
       int64_t muonTrackIndex = muonTrack.globalIndex();
@@ -1341,7 +1169,7 @@ struct GlobalMuonMatching {
         }
       }
 
-      if(!cfgMatchAllTracks.value) {
+      if(!configMatching.cfgMatchAllTracks.value) {
         // collect global MFT-MCH or MFT-MCH-MID tracks and associate them to the corresponding MCH(-MID) track
         for (const auto& muonTrack : muonTracks) {
           if (!muonTrack.has_collision()) {
@@ -1454,10 +1282,7 @@ struct GlobalMuonMatching {
       mch::TrackParam trackParam = mch::TrackParam(convertedTrack.first());
 
       // Convert MCH track to FWD track and store new parameters after realignment
-      auto trackParTmp = mMatching.MCHtoFwd(trackParam);
-      mchTrackParIt->second.setParameters(trackParTmp.getParameters());
-      mchTrackParIt->second.setCovariances(trackParTmp.getCovariances());
-      mchTrackParIt->second.setZ(trackParTmp.getZ());
+      mchTrackParIt->second = MCHtoFwd(mch::TrackParam(convertedTrack.first()));
       mchTrackParIt->second.setTrackChi2(trackParam.getTrackChi2() / convertedTrack.getNDF());
       mchTrackParIt->second.setNClusters(convertedTrack.getNClusters());
       if (removable) {
@@ -1473,7 +1298,6 @@ struct GlobalMuonMatching {
                        CMFT const& mftCovs,
                        std::string funcName,
                        float matchingPlaneZ,
-                       int extrapMethod,
                        const MatchingCandidates& matchingCandidates,
                        MatchingCandidates& newMatchingCandidates)
   {
@@ -1481,11 +1305,9 @@ struct GlobalMuonMatching {
 
     std::string funcNameEffective = funcName;
     float matchingPlaneZEffective = matchingPlaneZ;
-    int extrapMethodEffective = extrapMethod;
     if (funcName == "prod") {
       funcNameEffective = "matchALL";
       matchingPlaneZEffective = MatchingPlaneDefaultZ;
-      extrapMethodEffective = ExtrapolationMethodStandard;
     }
 
     if (mMatchingFunctionMap.count(funcNameEffective) < 1) {
@@ -1518,8 +1340,8 @@ struct GlobalMuonMatching {
         o2::track::TrackParCovFwd mchTrackProp = mchTrackParIt->second;
 
         if (matchingPlaneZEffective < 0.) {
-          mftTrackProp = propagateToMatchingPlaneMft(mchTrack, mftTrack, mftTrackCov, collision, matchingPlaneZEffective, extrapMethodEffective);
-          mchTrackProp = propagateToMatchingPlaneMch(mchTrack, mftTrack, mftTrackCov, collision, matchingPlaneZEffective, extrapMethodEffective);
+          mftTrackProp = propagateToZMft(mftTrackProp, matchingPlaneZ);
+          mchTrackProp = propagateToZMch(mchTrackProp, matchingPlaneZ);
         }
 
         auto matchResult = matchingFunc(mchTrackProp, mftTrackProp);
@@ -1586,8 +1408,8 @@ struct GlobalMuonMatching {
         o2::track::TrackParCovFwd mchTrackProp = mchTrackParIt->second;
 
         if (matchingPlaneZ < 0.) {
-          mftTrackProp = propagateToMatchingPlaneMft(mchTrack, mftTrack, mftTrackCov, collision, matchingPlaneZ, 0);
-          mchTrackProp = propagateToMatchingPlaneMch(mchTrack, mftTrack, mftTrackCov, collision, matchingPlaneZ, 0);
+          mftTrackProp = propagateToZMft(mftTrackProp, matchingPlaneZ);
+          mchTrackProp = propagateToZMch(mchTrackProp, matchingPlaneZ);
         }
 
         std::vector<float> output;
@@ -1629,17 +1451,17 @@ struct GlobalMuonMatching {
   {
     auto collision = collisions.rawIteratorAt(collisionInfo.index);
 
-    if (cfgEnableMCHRealign.value) {
+    if (configMchRealign.cfgEnableMCHRealign.value) {
       runMuonRealignment(muonTracks, clusters);
     }
 
     std::vector<int64_t> taggedMuons;
     getTaggedMuons(collisionInfo, collisions, muonTracks, taggedMuons);
 
-    if (cfgCustomMatchingStrategy.value == 0) {
+    if (configMatching.cfgCustomMatchingStrategy.value == 0) {
       if (hasActiveChi2Matching) {
         MatchingCandidates matchingCandidates;
-        runChi2Matching(collisions, muonTracks, mftTracks, mftCovs, activeChi2FunctionName, activeChi2MatchingPlaneZ, activeChi2ExtrapMethod, collisionInfo.matchingCandidates, matchingCandidates);
+        runChi2Matching(collisions, muonTracks, mftTracks, mftCovs, activeChi2FunctionName, activeChi2MatchingPlaneZ, collisionInfo.matchingCandidates, matchingCandidates);
         fillMatchingCandidatesForCollision(collision, muonTracks, mftTracks, mftCovs, matchingCandidates, taggedMuons);
       }
     } else {
@@ -1671,7 +1493,7 @@ struct GlobalMuonMatching {
       std::vector<MatchingCandidate> storedCandidates;
       int nStored = 0;
       for (const auto& candidate : candidates) {
-        if (cfgMaxCandidatesPerMchTrack.value >= 0 && nStored >= cfgMaxCandidatesPerMchTrack.value) {
+        if (configMatching.cfgMaxCandidatesPerMchTrack.value >= 0 && nStored >= configMatching.cfgMaxCandidatesPerMchTrack.value) {
           break;
         }
 
@@ -1712,7 +1534,7 @@ struct GlobalMuonMatching {
                                  TMFT const& mftTracks,
                                  CMFT const& mftCovs)
   {
-    if (!cfgProduceCandidateFwdTracks.value) {
+    if (!configMatching.cfgProduceCandidateFwdTracks.value) {
       return;
     }
 
@@ -1726,7 +1548,7 @@ struct GlobalMuonMatching {
       if (trackType > GlobalTrackTypeMax) {
         mFwdTrackToGmmCandTrkIndex[track.globalIndex()] = nextGmmCandTrkIndex;
         nextGmmCandTrkIndex += 1 + countStoredCandidatesForMchTrack(track.globalIndex());
-      } else if (cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
+      } else if (configMatching.cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
         nextGmmCandTrkIndex += 1;
       }
     }
@@ -1760,7 +1582,7 @@ struct GlobalMuonMatching {
         }
       }
 
-      if (cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
+      if (configMatching.cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
         int32_t gmmMchTrackId = -1;
         const auto mchIterator = mFwdTrackToGmmCandTrkIndex.find(track.matchMCHTrackId());
         if (mchIterator != mFwdTrackToGmmCandTrkIndex.end()) {
