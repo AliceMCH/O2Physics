@@ -250,7 +250,7 @@ struct GlobalMuonMatching {
    public:
     TrackParExt() = default;
     TrackParExt(const TrackParExt& t) = default;
-    TrackParExt(o2::track::TrackParCovFwd const& t, int nc = -1, bool r = false)
+    explicit TrackParExt(o2::track::TrackParCovFwd const& t, int nc = -1, bool r = false)
       : TrackParCovFwd(t), nClusters(nc), removable(r) {}
     ~TrackParExt() = default;
 
@@ -1562,8 +1562,9 @@ struct GlobalMuonMatching {
         if (mchIterator != mFwdTrackToGmmCandTrkIndex.end()) {
           gmmMchTrackId = mchIterator->second;
         }
+        TrackParExt parExt(fwdtrackutils::getTrackParCovFwd(track, track));
         fillBaseGmmCandFwdTrack(track,
-                                fwdtrackutils::getTrackParCovFwd(track, track),
+                                parExt,
                                 gmmMchTrackId,
                                 track.chi2MatchMCHMFT(),
                                 track.matchScoreMCHMFT());
