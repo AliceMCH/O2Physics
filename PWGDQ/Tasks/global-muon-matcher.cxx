@@ -9,7 +9,7 @@
 // granted to it by virtue of its status as an Intergovernmental Organization
 // or submit itself to any jurisdiction.
 //
-/// \file global-muon-matcher.cxx
+/// \file globalMuonMatching.cxx
 /// \brief Global muon matching
 //
 #include "PWGDQ/Core/MuonMatchingMlResponse.h"
@@ -71,8 +71,6 @@
 #include <utility>
 #include <vector>
 
-#include <math.h>
-
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::aod;
@@ -98,11 +96,16 @@ DECLARE_SOA_TABLE(GlobalMuonMatchCandidates, "AOD", "GMCAND",
 
 namespace globalmuonmatching
 {
-DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, matchCandidate); //! Array of GlobalMuonMatchCandidates indices
+DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, globalMuonMatchCandidate); //! Array of GlobalMuonMatchCandidates indices
+DECLARE_SOA_INDEX_COLUMN(FwdTrackReAlign, fwdTrackReAlign);                         //! Index of ambiguous FwdTracksReAlign entry
+DECLARE_SOA_SLICE_INDEX_COLUMN(Bc, bc);                                             //! BC index slice compatible with the track time window
 } // namespace globalmuonmatching
 
 DECLARE_SOA_TABLE(FwdTrkMatchCands, "AOD", "FWDTRKMATCHCAND", //! Vectors of match-candidate indices stored per fwdtrack
                   globalmuonmatching::GlobalMuonMatchCandidateIds, o2::soa::Marker<3>);
+
+DECLARE_SOA_TABLE(AmbiguousFwdTracksReAlign, "AOD", "AMBIGFWDREALIGN", //! FwdTracksReAlign entries without a unique collision association
+                  o2::soa::Index<>, globalmuonmatching::FwdTrackReAlignId, globalmuonmatching::BcIdSlice);
 } // namespace o2::aod
 
 using MyEvents = soa::Join<aod::Collisions, aod::EvSels, aod::FT0Mults, aod::MFTMults, aod::PVMults, aod::CentFT0Ms, aod::CentFT0As, aod::CentFT0Cs>;
@@ -121,6 +124,11 @@ struct GlobalMuonMatching {
 
   static constexpr int GlobalTrackTypeMax = 2;
   static constexpr int MchMidTrackType = 3;
+  static constexpr int NMchChambers = 10;
+  static constexpr int MchDetElemNumberingBase = 100;
+  static constexpr int NMchDetElems = 156;
+  static constexpr int MinRemovableTrackClusters = 10;
+  static constexpr double DefaultChamberResolution = 0.04;
   static constexpr int ThetaAbsBoundaryDeg = 3;
   static constexpr double SlopeResolutionZ = 535.;
   static constexpr int MatchingDegreesOfFreedom = 5;
@@ -157,16 +165,16 @@ struct GlobalMuonMatching {
     Configurable<bool> cfgEnableMCHRealign{"cfgEnableMCHRealign", true, "Enable re-alignment of MCH clusters and tracks"};
     Configurable<std::string> cfgGeoRefPath{"cfgGeoRefPath", "GLO/Config/GeometryAligned", "Path of the reference geometry file"};
     Configurable<std::string> cfgGeoNewPath{"cfgGeoNewPath", "GLO/Config/GeometryAligned", "Path of the new geometry file"};
-    Configurable<int64_t> nolaterthanRef{"ccdb-no-later-than-ref", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of reference basis"};
-    Configurable<int64_t> nolaterthanNew{"ccdb-no-later-than-new", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of new basis"};
-    Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", 0.04, "Chamber resolution along X configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
-    Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", 0.04, "Chamber resolution along Y configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<int64_t> cfgCcdbNoLaterThanRef{"cfgCcdbNoLaterThanRef", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of reference basis"};
+    Configurable<int64_t> cfgCcdbNoLaterThanNew{"cfgCcdbNoLaterThanNew", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of new basis"};
+    Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", DefaultChamberResolution, "Chamber resolution along X configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", DefaultChamberResolution, "Chamber resolution along Y configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
     Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                            // 6 for pp, 4 for PbPb
   } configMchRealign;
 
   ////   Variables for MFT alignment corrections
   struct : ConfigurableGroup {
-    Configurable<bool> cfgEnableMftAlignmentCorrections{"cfgEnableMFTAlignmentCorrections", true, "Enable alignment corrections for the MFT tracks"};
+    Configurable<bool> cfgEnableMftAlignmentCorrections{"cfgEnableMftAlignmentCorrections", true, "Enable alignment corrections for the MFT tracks"};
     // slope corrections
     // Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", (-0.0006696 - 0.0005621) / 2.f, "MFT X slope correction - top half"};
     // Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", (0.00105 + 0.001007) / 2.f, "MFT X slope correction - bottom half"};
@@ -196,7 +204,6 @@ struct GlobalMuonMatching {
   // 0 = chi2 (runChi2Matching), 1 = ML (runMlMatching)
   struct : ConfigurableGroup {
     Configurable<int> cfgCustomMatchingStrategy{"cfgCustomMatchingStrategy", 0, "0=chi2, 1=ML for custom matches"};
-    Configurable<bool> cfgProduceCandidateFwdTracks{"cfgProduceCandidateFwdTracks", true, "Produce GMMCANDTRK/GMMCANDTRKCOV tables (all FwdTracks + match candidates)"};
     Configurable<bool> cfgIncludeGlobalMuonsInFwdTracks{"cfgIncludeGlobalMuonsInFwdTracks", false, "Include MFT-MCH-MID global muons in GMMCANDTRK table"};
     Configurable<int> cfgMaxCandidatesPerMchTrack{"cfgMaxCandidatesPerMchTrack", -1, "Maximum number of match candidates stored per MCH track (-1: no limit)"};
     Configurable<bool> cfgMatchAllTracks{"cfgMatchAllTracks", false, "If true the matching is performed considering all the MFT tracks for which the covariances are available; if false the matching is performed considering only the global forward tracks stored at production"};
@@ -287,6 +294,12 @@ struct GlobalMuonMatching {
   Produces<o2::aod::FwdTrkMatchCands> fwdTrkMatchCands;
   Produces<o2::aod::StoredFwdTracksReAlign> gmCandidateFwdTracks;
   Produces<o2::aod::StoredFwdTrksCovReAlign> gmCandidateFwdTracksCov;
+  Produces<o2::aod::AmbiguousFwdTracksReAlign> gmAmbiguousFwdTracksReAlign;
+
+  int32_t mGmmCandFwdTrackRowIndex{0};
+  std::unordered_map<int64_t, std::array<int32_t, 2>> mAmbBcSliceByFwdTrackId;
+  bool mHasLastMchAmbiguousBcSlice{false};
+  std::array<int32_t, 2> mLastMchAmbiguousBcSlice{};
 
   int32_t mMatchCandidateCounter{0};
   std::unordered_map<int64_t, std::vector<int32_t>> mMchTrackToCandidateIndices;
@@ -454,14 +467,14 @@ struct GlobalMuonMatching {
   {
     // make sure detector number is valid
     if (!(iDetElemNumber >= fgSNDetElemCh[0] &&
-          iDetElemNumber < fgSNDetElemCh[10])) {
+          iDetElemNumber < fgSNDetElemCh[NMchChambers])) {
       LOGF(fatal, "Invalid detector element number: %d", iDetElemNumber);
     }
     /// get det element number from ID
     // get chamber and element number in chamber
     int iCh = 0;
     int iDet = 0;
-    for (int i = 1; i <= 10; i++) {
+    for (int i = 1; i <= NMchChambers; i++) {
       if (iDetElemNumber < fgSNDetElemCh[i]) {
         iCh = i;
         iDet = iDetElemNumber - fgSNDetElemCh[i - 1];
@@ -470,12 +483,12 @@ struct GlobalMuonMatching {
     }
 
     // make sure detector index is valid
-    if (!(iCh > 0 && iCh <= 10 && iDet < fgNDetElemCh[iCh - 1])) {
-      LOGF(fatal, "Invalid detector element id: %d", 100 * iCh + iDet);
+    if (!(iCh > 0 && iCh <= NMchChambers && iDet < fgNDetElemCh[iCh - 1])) {
+      LOGF(fatal, "Invalid detector element id: %d", MchDetElemNumberingBase * iCh + iDet);
     }
 
     // add number of detectors up to this chamber
-    return 100 * iCh + iDet;
+    return MchDetElemNumberingBase * iCh + iDet;
   }
 
   bool RemoveTrack(mch::Track& track)
@@ -527,7 +540,7 @@ struct GlobalMuonMatching {
       auto itNextToNextParam = (itNextParam == track.end()) ? itNextParam : std::next(itNextParam);
       itStartingParam = track.rbegin();
 
-      if (track.getNClusters() < 10) {
+      if (track.getNClusters() < MinRemovableTrackClusters) {
         removeTrack = true;
         break;
       } else {
@@ -542,7 +555,7 @@ struct GlobalMuonMatching {
     }
 
     if (!removeTrack) {
-      for (auto& param : track) {
+      for (auto& param : track) { // o2-linter: disable=const-ref-in-for-loop (object is modified in loop)
         param.setParameters(param.getSmoothParameters());
         param.setCovariances(param.getSmoothCovariances());
       }
@@ -572,8 +585,8 @@ struct GlobalMuonMatching {
     mch::TrackExtrap::useExtrapV2();
 
     // Load geometry information from CCDB/local
-    LOGF(info, "Loading reference aligned geometry from CCDB no later than %d", configMchRealign.nolaterthanRef.value);
-    ccdbManager->setCreatedNotAfter(configMchRealign.nolaterthanRef.value); // this timestamp has to be consistent with what has been used in reco
+    LOGF(info, "Loading reference aligned geometry from CCDB no later than %d", configMchRealign.cfgCcdbNoLaterThanRef.value);
+    ccdbManager->setCreatedNotAfter(configMchRealign.cfgCcdbNoLaterThanRef.value); // this timestamp has to be consistent with what has been used in reco
     geoRef = ccdbManager->getForTimeStamp<TGeoManager>(configMchRealign.cfgGeoRefPath, bc.timestamp());
     ccdbManager->clearCache(configMchRealign.cfgGeoRefPath);
     if (geoRef != nullptr) {
@@ -581,13 +594,13 @@ struct GlobalMuonMatching {
     } else {
       LOGF(fatal, "Reference aligned geometry object is not available in CCDB at timestamp=%llu", bc.timestamp());
     }
-    for (int i = 0; i < 156; i++) {
+    for (int i = 0; i < NMchDetElems; i++) {
       int iDEN = GetDetElemId(i);
       transformRef[iDEN] = transformation(iDEN);
     }
 
-    LOGF(info, "Loading new aligned geometry from CCDB no later than %d", configMchRealign.nolaterthanNew.value);
-    ccdbManager->setCreatedNotAfter(configMchRealign.nolaterthanNew.value); // make sure this timestamp can be resolved regarding the reference one
+    LOGF(info, "Loading new aligned geometry from CCDB no later than %d", configMchRealign.cfgCcdbNoLaterThanNew.value);
+    ccdbManager->setCreatedNotAfter(configMchRealign.cfgCcdbNoLaterThanNew.value); // make sure this timestamp can be resolved regarding the reference one
     geoNew = ccdbManager->getForTimeStamp<TGeoManager>(configMchRealign.cfgGeoNewPath, bc.timestamp());
     ccdbManager->clearCache(configMchRealign.cfgGeoNewPath);
     if (geoNew != nullptr) {
@@ -595,7 +608,7 @@ struct GlobalMuonMatching {
     } else {
       LOGF(fatal, "New aligned geometry object is not available in CCDB at timestamp=%llu", bc.timestamp());
     }
-    for (int i = 0; i < 156; i++) {
+    for (int i = 0; i < NMchDetElems; i++) {
       int iDEN = GetDetElemId(i);
       transformNew[iDEN] = transformation(iDEN);
     }
@@ -881,6 +894,15 @@ struct GlobalMuonMatching {
                                float matchScoreMCHMFT)
   {
     const int32_t collisionId = track.has_collision() ? track.collisionId() : -1;
+    bool hasBcSlice = false;
+    std::array<int32_t, 2> bcSlice{};
+    if (collisionId < 0) {
+      const auto ambIt = mAmbBcSliceByFwdTrackId.find(track.globalIndex());
+      if (ambIt != mAmbBcSliceByFwdTrackId.end()) {
+        bcSlice = ambIt->second;
+        hasBcSlice = true;
+      }
+    }
 
     gmCandidateFwdTracks(
       collisionId,
@@ -908,6 +930,16 @@ struct GlobalMuonMatching {
       track.trackTimeRes());
 
     storeFwdTrackCovariance(trackPar.getCovariances());
+    if (hasBcSlice) {
+      int32_t bcSliceArray[2] = {bcSlice[0], bcSlice[1]};
+      gmAmbiguousFwdTracksReAlign(mGmmCandFwdTrackRowIndex, bcSliceArray);
+    }
+    mGmmCandFwdTrackRowIndex += 1;
+
+    mHasLastMchAmbiguousBcSlice = hasBcSlice;
+    if (hasBcSlice) {
+      mLastMchAmbiguousBcSlice = bcSlice;
+    }
   }
 
   template <class TMCH, class TMFT>
@@ -937,6 +969,20 @@ struct GlobalMuonMatching {
 
     const float chi2 = static_cast<float>(mchTrack.chi2());
     const int32_t collisionId = mchTrack.has_collision() ? mchTrack.collisionId() : -1;
+    bool hasBcSlice = false;
+    std::array<int32_t, 2> bcSlice{};
+    if (collisionId < 0) {
+      if (mHasLastMchAmbiguousBcSlice) {
+        bcSlice = mLastMchAmbiguousBcSlice;
+        hasBcSlice = true;
+      } else {
+        const auto ambIt = mAmbBcSliceByFwdTrackId.find(mchTrack.globalIndex());
+        if (ambIt != mAmbBcSliceByFwdTrackId.end()) {
+          bcSlice = ambIt->second;
+          hasBcSlice = true;
+        }
+      }
+    }
 
     bool isRemovable = mchPar.isRemovable();
 
@@ -966,6 +1012,11 @@ struct GlobalMuonMatching {
       mchTrack.trackTimeRes());
 
     storeFwdTrackCovariance(globalMuonRefit.getCovariances());
+    if (hasBcSlice) {
+      int32_t bcSliceArray[2] = {bcSlice[0], bcSlice[1]};
+      gmAmbiguousFwdTracksReAlign(mGmmCandFwdTrackRowIndex, bcSliceArray);
+    }
+    mGmmCandFwdTrackRowIndex += 1;
   }
 
   o2::track::TrackParCovFwd propagateToZMch(const o2::track::TrackParCovFwd& muon, const double z)
@@ -1223,7 +1274,7 @@ struct GlobalMuonMatching {
     for (auto const& muon : muons) {
       int mchIndex = muon.globalIndex();
       // skip global forward matches
-      if (static_cast<int>(muon.trackType() > 2)) {
+      if (muon.trackType() > GlobalTrackTypeMax) {
         continue;
       }
 
@@ -1505,13 +1556,17 @@ struct GlobalMuonMatching {
 
   template <class TMUON, class TMFT>
   void fillGmmCandidateFwdTracks(TMUON const& muonTracks,
-                                 TMFT const& mftTracks)
+                                 TMFT const& mftTracks,
+                                 aod::AmbiguousFwdTracks const& ambFwdTracks)
   {
-    if (!configMatching.cfgProduceCandidateFwdTracks.value) {
-      return;
-    }
-
     mFwdTrackToGmmCandTrkIndex.clear();
+    mGmmCandFwdTrackRowIndex = 0;
+    mHasLastMchAmbiguousBcSlice = false;
+    mAmbBcSliceByFwdTrackId.clear();
+    for (const auto& ambFwdTrack : ambFwdTracks) {
+      const auto bcIds = ambFwdTrack.bcIds();
+      mAmbBcSliceByFwdTrackId[ambFwdTrack.fwdtrackId()] = {bcIds[0], bcIds[1]};
+    }
 
     // First pass: assign GMMCANDTRK row indices for MCH/MCH-MID base entries so that
     // MCHTrackId can be remapped consistently even when global muons appear first in FwdTracks.
@@ -1531,6 +1586,7 @@ struct GlobalMuonMatching {
       const int trackType = static_cast<int>(track.trackType());
 
       if (trackType > GlobalTrackTypeMax) {
+        mHasLastMchAmbiguousBcSlice = false;
         const int64_t mchTrackIndex = track.globalIndex();
         const int32_t gmmMchTrackId = mFwdTrackToGmmCandTrkIndex.at(mchTrackIndex);
 
@@ -1597,7 +1653,8 @@ struct GlobalMuonMatching {
                    MyMuons const& muonTracks,
                    MyMFTs const& mftTracks,
                    MyMFTCovariances const& mftCovs,
-                   aod::FwdTrkCls const& clusters)
+                   aod::FwdTrkCls const& clusters,
+                   aod::AmbiguousFwdTracks const& ambFwdTracks)
   {
     auto bc = bcs.begin();
     initCcdb(bc);
@@ -1623,7 +1680,7 @@ struct GlobalMuonMatching {
     // fill table with track/candidates index mapping
     fillFwdTrkMatchCands(muonTracks);
     // fill track tables
-    fillGmmCandidateFwdTracks(muonTracks, mftTracks);
+    fillGmmCandidateFwdTracks(muonTracks, mftTracks, ambFwdTracks);
   }
 
   PROCESS_SWITCH(GlobalMuonMatching, processData, "processData", true);
