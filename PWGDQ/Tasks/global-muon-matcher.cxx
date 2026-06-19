@@ -98,14 +98,14 @@ namespace globalmuonmatching
 {
 DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, globalMuonMatchCandidate); //! Array of GlobalMuonMatchCandidates indices
 DECLARE_SOA_INDEX_COLUMN_FULL(FwdTrackRealign, fwdTrackRealign, int, FwdTracksReAlign, ""); //! Index of ambiguous FwdTracksReAlign entry
-DECLARE_SOA_SLICE_INDEX_COLUMN(Bc, bc);                                             //! BC index slice compatible with the track time window
+DECLARE_SOA_SLICE_INDEX_COLUMN(BC, bc);                                             //! BC index slice compatible with the track time window
 } // namespace globalmuonmatching
 
 DECLARE_SOA_TABLE(FwdTrkMatchCands, "AOD", "FWDTRKMATCHCAND", //! Vectors of match-candidate indices stored per fwdtrack
                   globalmuonmatching::GlobalMuonMatchCandidateIds, o2::soa::Marker<3>);
 
 DECLARE_SOA_TABLE(AmbiguousFwdTracksReAlign, "AOD", "AMBIGFWDREALIGN", //! FwdTracksReAlign entries without a unique collision association
-                  o2::soa::Index<>, globalmuonmatching::FwdTrackRealignId, globalmuonmatching::BcIdSlice);
+                  o2::soa::Index<>, globalmuonmatching::FwdTrackRealignId, globalmuonmatching::BCIdSlice);
 } // namespace o2::aod
 
 using MyEvents = soa::Join<aod::Collisions, aod::EvSels, aod::FT0Mults, aod::MFTMults, aod::PVMults, aod::CentFT0Ms, aod::CentFT0As, aod::CentFT0Cs>;
