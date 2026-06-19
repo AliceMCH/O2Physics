@@ -96,7 +96,7 @@ DECLARE_SOA_TABLE(GlobalMuonMatchCandidates, "AOD", "GMCAND",
 
 namespace globalmuonmatching
 {
-DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, globalMuonMatchCandidate); //! Array of GlobalMuonMatchCandidates indices
+DECLARE_SOA_ARRAY_INDEX_COLUMN(GlobalMuonMatchCandidate, globalMuonMatchCandidate);         //! Array of GlobalMuonMatchCandidates indices
 DECLARE_SOA_INDEX_COLUMN_FULL(FwdTrackRealign, fwdTrackRealign, int, FwdTracksReAlign, ""); //! Index of ambiguous FwdTracksReAlign entry
 DECLARE_SOA_SLICE_INDEX_COLUMN(BC, bc);                                                     //! BC index slice compatible with the track time window
 } // namespace globalmuonmatching
@@ -167,9 +167,9 @@ struct GlobalMuonMatching {
     Configurable<std::string> cfgGeoNewPath{"cfgGeoNewPath", "GLO/Config/GeometryAligned", "Path of the new geometry file"};
     Configurable<int64_t> cfgCcdbNoLaterThanRef{"cfgCcdbNoLaterThanRef", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of reference basis"};
     Configurable<int64_t> cfgCcdbNoLaterThanNew{"cfgCcdbNoLaterThanNew", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count(), "latest acceptable timestamp of creation for the object of new basis"};
-    Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", 0.04, "Chamber resolution along X configuration for refit"};                     // 0.4cm pp, 0.2cm PbPb
-    Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", 0.04, "Chamber resolution along Y configuration for refit"};                     // 0.4cm pp, 0.2cm PbPb
-    Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                                                // 6 for pp, 4 for PbPb
+    Configurable<double> cfgChamberResolutionX{"cfgChamberResolutionX", 0.04, "Chamber resolution along X configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<double> cfgChamberResolutionY{"cfgChamberResolutionY", 0.04, "Chamber resolution along Y configuration for refit"}; // 0.4cm pp, 0.2cm PbPb
+    Configurable<double> cfgSigmaCutImprove{"cfgSigmaCutImprove", 6., "Sigma cut for track improvement"};                            // 6 for pp, 4 for PbPb
   } configMchRealign;
 
   ////   Variables for MFT alignment corrections
