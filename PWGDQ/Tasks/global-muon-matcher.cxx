@@ -1425,7 +1425,7 @@ struct GlobalMuonMatching {
     for (auto const& muon : muons) {
       int mchIndex = muon.globalIndex();
       // skip global forward matches
-      if (muon.trackType() > GlobalTrackTypeMax) {
+      if (muon.trackType() <= GlobalTrackTypeMax) {
         continue;
       }
 
